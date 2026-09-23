@@ -1,0 +1,28 @@
+# Dependencias
+node_modules/
+
+# Compilación
+dist/
+release/
+
+# Base de datos local
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Variables y configuración privada
+.env
+.env.*
+
+# Logs
+*.log
+npm-debug.log*
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# VS Code
+.vscode/
