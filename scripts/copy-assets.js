@@ -10,4 +10,4 @@ fs.cpSync(source, destination, {
     recursive: true
 });
 
-console.log("Assets del renderer copiados correctamente.");
+console.log("Assets del renderer copiados correctamente."); 
