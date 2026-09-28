@@ -1,13 +1,31 @@
 const fs = require("fs");
 const path = require("path");
 
-const source = path.join(__dirname, "..", "src", "renderer");
-const destination = path.join(__dirname, "..", "dist", "renderer");
+const projectRoot = path.join(__dirname, "..");
 
-fs.mkdirSync(destination, { recursive: true });
+/**
+ * Copia un directorio desde src hacia dist.
+ */
+function copyDirectory(source, destination) {
+    fs.mkdirSync(destination, { recursive: true });
+    fs.cpSync(source, destination, { recursive: true });
+}
 
-fs.cpSync(source, destination, {
-    recursive: true
-});
+// Copia los archivos utilizados por la interfaz.
+copyDirectory(
+    path.join(projectRoot, "src", "renderer"),
+    path.join(projectRoot, "dist", "renderer")
+);
 
-console.log("Assets del renderer copiados correctamente."); 
+// Copia el esquema necesario para inicializar SQLite.
+fs.mkdirSync(
+    path.join(projectRoot, "dist", "database"),
+    { recursive: true }
+);
+
+fs.copyFileSync(
+    path.join(projectRoot, "src", "database", "schema.sql"),
+    path.join(projectRoot, "dist", "database", "schema.sql")
+);
+
+console.log("Archivos necesarios copiados correctamente.");
