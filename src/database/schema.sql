@@ -156,3 +156,53 @@ CREATE TABLE IF NOT EXISTS cartera_clientes (
 
     UNIQUE (cartera_id, cliente_id)
 );
+
+CREATE TABLE IF NOT EXISTS importaciones (
+    id TEXT PRIMARY KEY,
+
+    cartera_id TEXT NOT NULL,
+
+    nombre_archivo TEXT NOT NULL,
+    fecha_importacion TEXT NOT NULL,
+
+    total_registros INTEGER NOT NULL DEFAULT 0
+        CHECK (total_registros >= 0),
+
+    registros_importados INTEGER NOT NULL DEFAULT 0
+        CHECK (registros_importados >= 0),
+
+    registros_rechazados INTEGER NOT NULL DEFAULT 0
+        CHECK (registros_rechazados >= 0),
+
+    estado TEXT NOT NULL DEFAULT 'PROCESANDO'
+        CHECK (
+            estado IN (
+                'PROCESANDO',
+                'COMPLETADA',
+                'COMPLETADA_CON_ERRORES',
+                'FALLIDA'
+            )
+        ),
+
+    created_at TEXT NOT NULL,
+
+    FOREIGN KEY (cartera_id)
+        REFERENCES carteras(id)
+);
+
+CREATE TABLE IF NOT EXISTS errores_importacion (
+    id TEXT PRIMARY KEY,
+
+    importacion_id TEXT NOT NULL,
+
+    numero_fila INTEGER,
+    campo TEXT,
+    valor_original TEXT,
+    descripcion TEXT NOT NULL,
+
+    created_at TEXT NOT NULL,
+
+    FOREIGN KEY (importacion_id)
+        REFERENCES importaciones(id)
+        ON DELETE CASCADE
+);
