@@ -92,31 +92,3 @@ export function importar(
 ): Phoenix.ResultadoImportacion {
   return importarArchivo(db, ruta, usuarioId, nombreOriginal);
 }
-
-
-/**
- * Elimina los datos generados por las importaciones para reiniciar las pruebas.
- * Conserva usuarios y configuración local de la aplicación.
- */
-export function borrarDatosImportados(db: Database.Database): { clientesEliminados: number; importacionesEliminadas: number } {
-  const clientesEliminados = (db.prepare("SELECT COUNT(*) AS total FROM clientes").get() as { total: number }).total;
-  const importacionesEliminadas = (db.prepare("SELECT COUNT(*) AS total FROM importaciones").get() as { total: number }).total;
-
-  const limpiar = db.transaction(() => {
-    db.prepare("DELETE FROM gestiones").run();
-    db.prepare("DELETE FROM errores_importacion").run();
-    db.prepare("DELETE FROM importaciones").run();
-    db.prepare("DELETE FROM cartera_clientes").run();
-    db.prepare("DELETE FROM telefonos").run();
-    db.prepare("DELETE FROM correos").run();
-    db.prepare("DELETE FROM direcciones").run();
-    db.prepare("DELETE FROM vehiculos").run();
-    db.prepare("DELETE FROM operaciones").run();
-    db.prepare("DELETE FROM clientes").run();
-    db.prepare("DELETE FROM carteras").run();
-    db.prepare("DELETE FROM periodos").run();
-  });
-
-  limpiar();
-  return { clientesEliminados, importacionesEliminadas };
-}

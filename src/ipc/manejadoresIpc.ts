@@ -25,6 +25,7 @@ import Database from "better-sqlite3";
 import * as cartera from "../servicios/servicioCartera";
 import * as movil from "../servicios/servicioMovil";
 import * as cola from "../servicios/servicioColaLlamadas";
+import { iniciarSesion, UsuarioSesion } from "../servicios/servicioAuth";
 import { configurarServidor, estadoServidor } from "../servidor/gestorServidor";
 import { EXTENSIONES_EXCEL, EXTENSIONES_SOPORTADAS, EXTENSIONES_TEXTO } from "../importacion/lectorArchivos";
 
@@ -51,6 +52,23 @@ export function registrarManejadoresIpc(
   obtenerDb: () => Database.Database,
   obtenerVentana: () => BrowserWindow | null
 ): void {
+  let usuarioSesion: UsuarioSesion | null = null;
+
+  ipcMain.handle("auth:login", (_e, email: string, password: string) =>
+    envolver(() => {
+      usuarioSesion = iniciarSesion(obtenerDb(), email, password);
+      return usuarioSesion;
+    })
+  );
+
+  ipcMain.handle("auth:sesion", () => envolver(() => usuarioSesion));
+
+  ipcMain.handle("auth:logout", () => envolver(() => {
+    usuarioSesion = null;
+    cola.detenerCola(obtenerDb());
+    return true;
+  }));
+
   // ------------------------- Canales originales v0.1.0 -------------------------
 
   ipcMain.handle("dialogo:elegir-excel", async () => {
@@ -81,11 +99,6 @@ export function registrarManejadoresIpc(
   ipcMain.handle("resumen:obtener", async () => cartera.obtenerResumen(obtenerDb()));
 
   ipcMain.handle("importaciones:historial", async () => cartera.obtenerHistorial(obtenerDb()));
-
-  ipcMain.handle("importaciones:borrar-datos", () => envolver(() => {
-    cola.detenerCola(obtenerDb());
-    return cartera.borrarDatosImportados(obtenerDb());
-  }));
 
   // ------------------------------ Canales v0.2.0 ------------------------------
 

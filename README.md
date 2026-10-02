@@ -15,15 +15,6 @@ escritorio y como **servidor** para que otros equipos la usen desde el navegador
 - Node.js 18 o superior (https://nodejs.org)
 - Para Phoenix Mobile: Android Studio y un teléfono Android 8 o superior
 
-## Instalación de Node.js y npm
-
-El proyecto requiere Node.js para instalar las dependencias, compilar TypeScript y ejecutar Electron. npm se instala automáticamente junto con Node.js.
-
-En un computador nuevo con Windows, abrir PowerShell y ejecutar:
-
-```powershell
-winget install OpenJS.NodeJS.LTS
-
 ## Instalación (primera vez)
 
 Abre PowerShell en esta carpeta y ejecuta:

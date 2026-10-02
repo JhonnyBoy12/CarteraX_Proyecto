@@ -736,32 +736,6 @@ async function cargarHistorial(): Promise<void> {
   }
 }
 
-
-/** Configura el borrado completo de datos importados para pruebas. */
-function prepararHistorial(): void {
-  $("btn-borrar-importaciones").addEventListener("click", async () => {
-    if (Api.modo !== "electron") {
-      aviso("El borrado de datos de prueba sólo está disponible en la app de escritorio.", "error");
-      return;
-    }
-
-    const confirmado = window.confirm(
-      "Se eliminarán todos los clientes, teléfonos, operaciones, gestiones e importaciones cargadas. La configuración de CarteraX se conservará. ¿Deseas continuar?"
-    );
-    if (!confirmado) return;
-
-    try {
-      const resultado = await Api.borrarDatosImportados();
-      aviso(`Datos eliminados: ${resultado.clientesEliminados} clientes y ${resultado.importacionesEliminadas} importaciones.`, "ok");
-      await cargarHistorial();
-      await cargarResumen();
-      await cargarCategorias();
-    } catch (e) {
-      aviso((e as Error).message, "error");
-    }
-  });
-}
-
 // =====================================================================
 // Servidor
 // =====================================================================
@@ -831,8 +805,52 @@ function prepararServidor(): void {
 // Inicio
 // =====================================================================
 
-/** Conecta la navegación y carga los datos iniciales. */
-function iniciar(): void {
+/** Muestra la aplicación principal para el usuario autenticado. */
+function mostrarAplicacion(usuario: Phoenix.UsuarioSesion): void {
+  $("pantalla-login").hidden = true;
+  $("aplicacion").hidden = false;
+  $("usuario-nombre").textContent = `${usuario.nombre} ${usuario.apellido}`.trim();
+  $("usuario-email").textContent = usuario.email;
+}
+
+/** Configura el formulario de autenticación y el cierre de sesión. */
+function prepararAutenticacion(): void {
+  $("form-login").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const error = $("login-error");
+    error.hidden = true;
+    try {
+      const usuario = await Api.login(
+        ($("login-email") as HTMLInputElement).value,
+        ($("login-password") as HTMLInputElement).value
+      );
+      ($("login-password") as HTMLInputElement).value = "";
+      mostrarAplicacion(usuario);
+      cargarDatosIniciales();
+    } catch (e) {
+      error.textContent = (e as Error).message;
+      error.hidden = false;
+    }
+  });
+
+  $("btn-cerrar-sesion").addEventListener("click", async () => {
+    await Api.logout();
+    $("aplicacion").hidden = true;
+    $("pantalla-login").hidden = false;
+    ($("login-password") as HTMLInputElement).value = "";
+    ($("login-email") as HTMLInputElement).focus();
+  });
+}
+
+function cargarDatosIniciales(): void {
+  cargarResumen();
+  cargarCategorias();
+  cargarServidor();
+  cargarMovil();
+}
+
+/** Conecta la navegación y deja el acceso protegido por autenticación. */
+async function iniciar(): Promise<void> {
   // Cualquier elemento con data-ir navega (menú, botones, indicadores).
   document.addEventListener("click", (e) => {
     const destino = (e.target as HTMLElement).closest<HTMLElement>("[data-ir]");
@@ -845,13 +863,26 @@ function iniciar(): void {
   prepararZonaCarga();
   prepararClientes();
   prepararTelefono();
-  prepararHistorial();
   prepararServidor();
 
-  cargarResumen();
-  cargarCategorias();
-  cargarServidor();
-  cargarMovil();
+  prepararAutenticacion();
+
+  if (Api.modo === "web") {
+    $("pantalla-login").hidden = true;
+    $("aplicacion").hidden = false;
+    cargarDatosIniciales();
+    return;
+  }
+
+  const sesion = await Api.sesion();
+  if (sesion) {
+    mostrarAplicacion(sesion);
+    cargarDatosIniciales();
+  } else {
+    $("pantalla-login").hidden = false;
+    $("aplicacion").hidden = true;
+    ($("login-email") as HTMLInputElement).focus();
+  }
 
   // Re-verifica el teléfono cada 30 s para mantener el indicador al día.
   setInterval(() => {

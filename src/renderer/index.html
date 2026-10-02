@@ -15,7 +15,20 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="app">
+
+  <section class="pantalla-login" id="pantalla-login">
+    <form class="tarjeta-login" id="form-login">
+      <div class="login-marca">CarteraX</div>
+      <h1>Iniciar sesión</h1>
+      <p class="bajada">Ingresa tus credenciales para acceder a la gestión de cartera.</p>
+      <label class="campo-login"><span>Correo</span><input id="login-email" type="email" autocomplete="username" required /></label>
+      <label class="campo-login"><span>Contraseña</span><input id="login-password" type="password" autocomplete="current-password" required /></label>
+      <p class="login-error" id="login-error" hidden></p>
+      <button class="btn primario login-boton" type="submit">Ingresar</button>
+      <p class="login-ayuda">Usuario inicial de prueba: ejecutivo@carterax.cl</p>
+    </form>
+  </section>
+  <div class="app" id="aplicacion" hidden>
     <!-- ============================ NAVEGACIÓN ============================ -->
     <aside class="lateral">
       <div class="marca">
@@ -34,6 +47,12 @@
         <button class="menu-item" data-ir="historial">Historial</button>
         <button class="menu-item" data-ir="servidor">Servidor</button>
       </nav>
+
+      <div class="usuario-lateral">
+        <strong id="usuario-nombre">Ejecutivo</strong>
+        <span id="usuario-email"></span>
+        <button class="btn secundario" id="btn-cerrar-sesion" type="button">Cerrar sesión</button>
+      </div>
 
       <div class="estados">
         <button class="estado" data-ir="telefono" id="estado-telefono">
@@ -245,11 +264,7 @@
             <h1>Historial de importaciones</h1>
             <p class="bajada">Una fila por cada hoja o archivo CSV cargado.</p>
           </div>
-          <div class="acciones-cabecera">
-            <button class="btn peligro" id="btn-borrar-importaciones" type="button">Borrar datos importados</button>
-          </div>
         </header>
-        <div class="nota-prueba">Esta opción es sólo para pruebas. Elimina clientes, teléfonos, operaciones, gestiones e historial importado, pero conserva la configuración de la aplicación.</div>
         <div class="tabla-envoltura">
           <table id="tabla-historial">
             <thead>

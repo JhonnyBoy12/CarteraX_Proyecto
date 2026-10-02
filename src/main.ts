@@ -26,6 +26,7 @@ import { obtenerConexion, cerrarConexion } from "./db/conexion";
 import { registrarManejadoresIpc } from "./ipc/manejadoresIpc";
 import { arrancarSegunConfig, detenerServidor, leerConfigServidor } from "./servidor/gestorServidor";
 import { iniciarServidor } from "./servidor/servidorHttp";
+import { asegurarUsuarioInicial } from "./servicios/servicioAuth";
 
 /** `true` si la app se abrió con `--servidor` (sin ventana). */
 const MODO_SOLO_SERVIDOR = process.argv.includes("--servidor");
@@ -102,6 +103,7 @@ function crearVentana(): void {
 
 app.whenReady().then(async () => {
   obtenerDb();
+  asegurarUsuarioInicial(obtenerDb());
 
   if (MODO_SOLO_SERVIDOR) {
     await arrancarSoloServidor();

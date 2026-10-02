@@ -10,6 +10,9 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 contextBridge.exposeInMainWorld("phoenixAPI", {
+  login: (email: string, password: string) => ipcRenderer.invoke("auth:login", email, password),
+  obtenerSesion: () => ipcRenderer.invoke("auth:sesion"),
+  logout: () => ipcRenderer.invoke("auth:logout"),
   // ------------------------- Métodos originales v0.1.0 -------------------------
 
   /** Abre el selector de archivos (Excel o CSV). Devuelve la ruta o null. */
@@ -23,9 +26,6 @@ contextBridge.exposeInMainWorld("phoenixAPI", {
 
   /** Historial de importaciones. */
   obtenerHistorial: () => ipcRenderer.invoke("importaciones:historial"),
-
-  /** Borra los datos importados para reiniciar las pruebas locales. */
-  borrarDatosImportados: () => ipcRenderer.invoke("importaciones:borrar-datos"),
 
   // ------------------------------ Métodos v0.2.0 ------------------------------
 

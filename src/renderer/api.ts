@@ -21,11 +21,13 @@
 
 /** Métodos expuestos por `preload.ts` (modo electron). */
 interface PhoenixAPI {
+  login(email: string, password: string): Promise<Phoenix.Respuesta<Phoenix.UsuarioSesion>>;
+  obtenerSesion(): Promise<Phoenix.Respuesta<Phoenix.UsuarioSesion | null>>;
+  logout(): Promise<Phoenix.Respuesta<boolean>>;
   elegirArchivoExcel(): Promise<string | null>;
   importarExcel(ruta: string): Promise<{ ok: boolean; resultado?: Phoenix.ResultadoImportacion; error?: string }>;
   obtenerResumen(): Promise<Phoenix.ResumenCartera>;
   obtenerHistorial(): Promise<Phoenix.ImportacionHistorial[]>;
-  borrarDatosImportados(): Promise<Phoenix.Respuesta<{ clientesEliminados: number; importacionesEliminadas: number }>>;
   previsualizarArchivo(ruta: string): Promise<Phoenix.Respuesta<Phoenix.PreviaArchivo>>;
   rutaDeArchivo(archivo: File): string;
   listarClientes(filtro: Phoenix.FiltroClientes): Promise<Phoenix.Respuesta<Phoenix.PaginaClientes>>;
@@ -56,6 +58,9 @@ interface ArchivoSeleccionado {
 
 /** Contrato único que usa la interfaz, independiente del modo. */
 interface ClienteBackend {
+  login(email: string, password: string): Promise<Phoenix.UsuarioSesion>;
+  sesion(): Promise<Phoenix.UsuarioSesion | null>;
+  logout(): Promise<void>;
   modo: "electron" | "web";
   elegirArchivo(): Promise<ArchivoSeleccionado | null>;
   desdeArchivoSoltado(archivo: File): ArchivoSeleccionado;
@@ -63,7 +68,6 @@ interface ClienteBackend {
   importar(a: ArchivoSeleccionado): Promise<Phoenix.ResultadoImportacion>;
   resumen(): Promise<Phoenix.ResumenCartera>;
   historial(): Promise<Phoenix.ImportacionHistorial[]>;
-  borrarDatosImportados(): Promise<{ clientesEliminados: number; importacionesEliminadas: number }>;
   clientes(filtro: Phoenix.FiltroClientes): Promise<Phoenix.PaginaClientes>;
   categorias(): Promise<string[]>;
   movil(): Promise<{ ip: string | null }>;
@@ -98,6 +102,9 @@ function desenvolver<T>(r: Phoenix.Respuesta<T>): T {
  */
 function crearClienteElectron(ipc: PhoenixAPI): ClienteBackend {
   return {
+    login: async (email, password) => desenvolver(await ipc.login(email, password)),
+    sesion: async () => desenvolver(await ipc.obtenerSesion()),
+    logout: async () => void desenvolver(await ipc.logout()),
     modo: "electron",
     async elegirArchivo() {
       const ruta = await ipc.elegirArchivoExcel();
@@ -112,7 +119,6 @@ function crearClienteElectron(ipc: PhoenixAPI): ClienteBackend {
     },
     resumen: () => ipc.obtenerResumen(),
     historial: () => ipc.obtenerHistorial(),
-    borrarDatosImportados: async () => desenvolver(await ipc.borrarDatosImportados()),
     clientes: async (f) => desenvolver(await ipc.listarClientes(f)),
     categorias: async () => desenvolver(await ipc.listarCategorias()),
     movil: async () => desenvolver(await ipc.obtenerMovil()),
@@ -165,6 +171,9 @@ function crearClienteWeb(): ClienteBackend {
     });
 
   return {
+    login: () => Promise.reject(new Error("El inicio de sesión está disponible en la aplicación de escritorio.")),
+    sesion: () => Promise.resolve(null),
+    logout: () => Promise.resolve(),
     modo: "web",
     elegirArchivo() {
       return new Promise((resolve) => {
@@ -184,7 +193,6 @@ function crearClienteWeb(): ClienteBackend {
     importar: (a) => subir("/api/importar", a),
     resumen: () => pedir("/api/resumen"),
     historial: () => pedir("/api/historial"),
-    borrarDatosImportados: () => Promise.reject(new Error("El borrado de datos de prueba sólo está disponible en la app de escritorio.")),
     clientes(f) {
       const q = new URLSearchParams();
       if (f.texto) q.set("texto", f.texto);

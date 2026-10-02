@@ -163,6 +163,14 @@ declare namespace Phoenix {
     filas: ClienteDetalle[];
   }
 
+
+  interface UsuarioSesion {
+    id: string;
+    nombre: string;
+    apellido: string;
+    email: string;
+  }
+
   // -------------------------------------------------------------------
   // Phoenix Mobile (teléfono Android por Wi-Fi)
   // -------------------------------------------------------------------
