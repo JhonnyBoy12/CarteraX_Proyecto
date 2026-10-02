@@ -1,0 +1,2956 @@
+diff --git a/package.json b/package.json
+index ac66596..0da07fc 100644
+--- a/package.json
++++ b/package.json
+@@ -1,12 +1,16 @@
+ {
+   "name": "ers-phoenix",
+-  "version": "0.1.0",
+-  "description": "ERS Phoenix - Sistema de Gestion de Cartera (capstone)",
++  "version": "0.2.0",
++  "description": "ERS Phoenix - Sistema de Gestion de Cartera (capstone) - importador CSV/XLSX, Phoenix Mobile y servidor HTTP",
+   "main": "dist/main.js",
+   "scripts": {
+-    "build": "tsc && node -e \"const fs=require('fs'); fs.mkdirSync('dist/db',{recursive:true}); fs.copyFileSync('src/db/schema.sql','dist/db/schema.sql'); fs.mkdirSync('dist/renderer',{recursive:true}); fs.copyFileSync('src/renderer/index.html','dist/renderer/index.html'); fs.copyFileSync('src/renderer/styles.css','dist/renderer/styles.css')\"",
++    "build": "tsc && node scripts/copiar-assets.js",
+     "start": "npm run build && electron .",
+     "dev": "tsc -w",
++    "servidor": "npm run build && node scripts/servidor.js",
++    "simulador-movil": "node scripts/simulador-movil.js",
++    "prueba": "npm run build && node pruebas/cargador.prueba.js",
++    "ejemplos": "node scripts/generar-ejemplos.js",
+     "dist": "npm run build && electron-builder",
+     "dist:dir": "npm run build && electron-builder --dir",
+     "postinstall": "electron-rebuild -f -w better-sqlite3"
+diff --git a/src/db/conexion.ts b/src/db/conexion.ts
+index 9d0fc6a..70ed86e 100644
+--- a/src/db/conexion.ts
++++ b/src/db/conexion.ts
+@@ -1,31 +1,61 @@
++/**
++ * @file conexion.ts
++ * @description Apertura única (singleton) de la base SQLite local.
++ *
++ * Cambios v0.2.0:
++ *  - Se activa `journal_mode = WAL` para permitir lecturas concurrentes
++ *    (la ventana de Electron y el servidor HTTP leen a la vez).
++ *  - Se agrega `rutaDbActual()` para que el servidor sepa qué base usa.
++ *  - Lógica original intacta: el esquema se lee de `schema.sql` y se
++ *    ejecuta con `CREATE ... IF NOT EXISTS` en cada arranque.
++ */
+ import Database from "better-sqlite3";
+ import * as fs from "fs";
+ import * as path from "path";
+ 
+-// El esquema se guarda como string (en vez de leer schema.sql en runtime)
+-// para que funcione igual de bien en desarrollo y ya empaquetado con
+-// electron-builder, sin depender de rutas de assets externos.
++// Nota: el build copia schema.sql junto a este archivo (dist/db/schema.sql),
++// por eso se resuelve con __dirname tanto en desarrollo como empaquetado.
+ const SCHEMA_SQL = fs.readFileSync(path.join(__dirname, "schema.sql"), "utf-8");
+ 
+ let instancia: Database.Database | null = null;
++let rutaActual: string | null = null;
+ 
+ /**
+  * Devuelve la conexión única a la base de datos local del usuario.
+- * `rutaDb` por defecto es phoenix_local.db en la carpeta de datos del usuario
+- * (se define en main.ts usando app.getPath('userData')).
++ * Si ya existe, la reutiliza (el parámetro se ignora en llamadas siguientes).
++ *
++ * @param rutaDb Ruta del archivo `.db`. En Electron se calcula en `main.ts`
++ *               con `app.getPath('userData')`; en modo servidor independiente
++ *               con la variable `PHOENIX_DB` o `./datos/phoenix_local.db`.
++ * @returns Conexión `better-sqlite3` lista para usar.
++ * @example
++ * const db = obtenerConexion("C:/Users/yo/AppData/Roaming/ers-phoenix/phoenix_local.db");
+  */
+ export function obtenerConexion(rutaDb: string): Database.Database {
+   if (instancia) return instancia;
+ 
++  fs.mkdirSync(path.dirname(rutaDb), { recursive: true });
+   instancia = new Database(rutaDb);
++  instancia.pragma("journal_mode = WAL");
+   instancia.pragma("foreign_keys = ON");
+   instancia.exec(SCHEMA_SQL);
++  rutaActual = rutaDb;
+   return instancia;
+ }
+ 
++/** Cierra la conexión (se llama al cerrar la última ventana). */
+ export function cerrarConexion(): void {
+   if (instancia) {
+     instancia.close();
+     instancia = null;
++    rutaActual = null;
+   }
+ }
++
++/**
++ * Ruta del archivo de base de datos abierto actualmente.
++ * @returns La ruta o `null` si aún no se abre ninguna conexión.
++ */
++export function rutaDbActual(): string | null {
++  return rutaActual;
++}
+diff --git a/src/db/consultas.ts b/src/db/consultas.ts
+index cc9ce6c..1657c77 100644
+--- a/src/db/consultas.ts
++++ b/src/db/consultas.ts
+@@ -1,5 +1,17 @@
++/**
++ * @file consultas.ts
++ * @description Consultas de lectura sobre la base local (panel, historial,
++ * clientes y registro de llamadas).
++ *
++ * Cambios v0.2.0:
++ *  - Las 4 funciones originales (`contarClientes`, `topClientesPorDeuda`,
++ *    `distribucionCategorias`, `historialImportaciones`) NO cambian.
++ *  - Nuevas: `obtenerIndicadores`, `distribucionTramos`, `listarClientes`,
++ *    `listarCategorias`, `historialLlamadas`.
++ */
+ import Database from "better-sqlite3";
+ 
++/** Fila del top de deuda (compatible con `Phoenix.ClienteResumen`). */
+ export interface ClienteResumen {
+   rut: string;
+   nombre_cliente: string | null;
+@@ -8,11 +20,13 @@ export interface ClienteResumen {
+   categoria_gestion: string | null;
+ }
+ 
++/** Conteo de clientes por categoría de gestión. */
+ export interface CategoriaConteo {
+   categoria_gestion: string;
+   total: number;
+ }
+ 
++/** Fila del historial de importaciones (una por hoja importada). */
+ export interface ImportacionHistorial {
+   archivo_nombre: string;
+   hoja_nombre: string;
+@@ -22,11 +36,25 @@ export interface ImportacionHistorial {
+   registros_con_error: number;
+ }
+ 
++// =====================================================================
++// Funciones originales v0.1.0 (sin cambios de lógica)
++// =====================================================================
++
++/**
++ * Cuenta el total de clientes cargados.
++ * @param db Conexión SQLite.
++ * @returns Número de filas en `clientes`.
++ */
+ export function contarClientes(db: Database.Database): number {
+   const fila = db.prepare("SELECT COUNT(*) AS total FROM clientes").get() as { total: number };
+   return fila.total;
+ }
+ 
++/**
++ * Clientes con mayor monto de deuda.
++ * @param db Conexión SQLite.
++ * @param limite Cantidad máxima de filas (por defecto 10).
++ */
+ export function topClientesPorDeuda(db: Database.Database, limite = 10): ClienteResumen[] {
+   return db
+     .prepare(
+@@ -38,6 +66,10 @@ export function topClientesPorDeuda(db: Database.Database, limite = 10): Cliente
+     .all(limite) as ClienteResumen[];
+ }
+ 
++/**
++ * Distribución de clientes por categoría de gestión (RF-34).
++ * @param db Conexión SQLite.
++ */
+ export function distribucionCategorias(db: Database.Database): CategoriaConteo[] {
+   return db
+     .prepare(
+@@ -49,6 +81,10 @@ export function distribucionCategorias(db: Database.Database): CategoriaConteo[]
+     .all() as CategoriaConteo[];
+ }
+ 
++/**
++ * Historial de importaciones, de la más reciente a la más antigua (RF-13).
++ * @param db Conexión SQLite.
++ */
+ export function historialImportaciones(db: Database.Database): ImportacionHistorial[] {
+   return db
+     .prepare(
+@@ -59,3 +95,176 @@ export function historialImportaciones(db: Database.Database): ImportacionHistor
+     )
+     .all() as ImportacionHistorial[];
+ }
++
++// =====================================================================
++// Nuevas consultas v0.2.0
++// =====================================================================
++
++/**
++ * Indicadores clave (KPI) para las tarjetas del panel.
++ * @param db Conexión SQLite.
++ * @returns Totales de cartera, promedios de mora/recuperación y actividad.
++ * @since 0.2.0
++ */
++export function obtenerIndicadores(db: Database.Database): Phoenix.Indicadores {
++  const base = db
++    .prepare(
++      `SELECT COUNT(*) AS totalClientes,
++              COALESCE(SUM(monto_deuda), 0) AS deudaTotal,
++              AVG(dias_mora) AS moraPromedio,
++              AVG(pct_recuperacion) AS recuperacionPromedio
++       FROM clientes`
++    )
++    .get() as {
++    totalClientes: number;
++    deudaTotal: number;
++    moraPromedio: number | null;
++    recuperacionPromedio: number | null;
++  };
++
++  const conTelefono = db
++    .prepare("SELECT COUNT(DISTINCT cliente_id) AS n FROM telefonos")
++    .get() as { n: number };
++
++  const importaciones = db
++    .prepare("SELECT COUNT(DISTINCT archivo_nombre) AS n FROM importaciones")
++    .get() as { n: number };
++
++  const llamadasHoy = db
++    .prepare(
++      `SELECT COUNT(*) AS n FROM gestiones
++       WHERE categoria = 'llamada' AND date(fecha, 'localtime') = date('now', 'localtime')`
++    )
++    .get() as { n: number };
++
++  return {
++    totalClientes: base.totalClientes,
++    deudaTotal: base.deudaTotal,
++    moraPromedio: base.moraPromedio === null ? null : Math.round(base.moraPromedio),
++    recuperacionPromedio:
++      base.recuperacionPromedio === null ? null : Math.round(base.recuperacionPromedio * 10) / 10,
++    clientesConTelefono: conTelefono.n,
++    totalImportaciones: importaciones.n,
++    llamadasHoy: llamadasHoy.n,
++  };
++}
++
++/**
++ * Clientes y deuda agrupados por tramo de mora (para el gráfico de barras).
++ * Los tramos vacíos se agrupan como "(sin tramo)".
++ * @param db Conexión SQLite.
++ * @since 0.2.0
++ */
++export function distribucionTramos(db: Database.Database): Phoenix.TramoConteo[] {
++  return db
++    .prepare(
++      `SELECT COALESCE(tramo_mora, '(sin tramo)') AS tramo_mora,
++              COUNT(*) AS total,
++              COALESCE(SUM(monto_deuda), 0) AS deuda
++       FROM clientes
++       GROUP BY COALESCE(tramo_mora, '(sin tramo)')
++       ORDER BY total DESC
++       LIMIT 12`
++    )
++    .all() as Phoenix.TramoConteo[];
++}
++
++/**
++ * Lista paginada de clientes con sus teléfonos y correos.
++ * Busca por RUT o nombre (texto parcial, sin distinguir mayúsculas).
++ *
++ * @param db Conexión SQLite.
++ * @param filtro Texto de búsqueda, categoría, página (desde 1) y tamaño.
++ * @returns Página de resultados + total de coincidencias.
++ * @since 0.2.0
++ * @example
++ * listarClientes(db, { texto: "12345", pagina: 1, porPagina: 50 });
++ */
++export function listarClientes(
++  db: Database.Database,
++  filtro: Phoenix.FiltroClientes = {}
++): Phoenix.PaginaClientes {
++  const porPagina = Math.min(Math.max(filtro.porPagina ?? 50, 1), 500);
++  const pagina = Math.max(filtro.pagina ?? 1, 1);
++
++  const condiciones: string[] = [];
++  const params: Record<string, unknown> = {};
++
++  if (filtro.texto && filtro.texto.trim()) {
++    condiciones.push("(c.rut LIKE @texto OR c.nombre_cliente LIKE @texto)");
++    params.texto = `%${filtro.texto.trim()}%`;
++  }
++  if (filtro.categoria) {
++    condiciones.push("c.categoria_gestion = @categoria");
++    params.categoria = filtro.categoria;
++  }
++  const where = condiciones.length ? `WHERE ${condiciones.join(" AND ")}` : "";
++
++  const total = (
++    db.prepare(`SELECT COUNT(*) AS n FROM clientes c ${where}`).get(params) as { n: number }
++  ).n;
++
++  // GROUP_CONCAT con separador '|' para traer teléfonos/correos en una sola consulta.
++  const filas = db
++    .prepare(
++      `SELECT c.id, c.rut, c.dv, c.nombre_cliente, c.monto_deuda, c.dias_mora,
++              c.tramo_mora, c.pct_recuperacion, c.categoria_gestion, c.comuna,
++              c.origen_archivo,
++              (SELECT GROUP_CONCAT(numero, '|') FROM telefonos t WHERE t.cliente_id = c.id) AS tels,
++              (SELECT GROUP_CONCAT(correo, '|') FROM correos m WHERE m.cliente_id = c.id) AS mails
++       FROM clientes c
++       ${where}
++       ORDER BY c.monto_deuda DESC, c.id
++       LIMIT @limite OFFSET @offset`
++    )
++    .all({ ...params, limite: porPagina, offset: (pagina - 1) * porPagina }) as Array<
++    Omit<Phoenix.ClienteDetalle, "telefonos" | "correos"> & { tels: string | null; mails: string | null }
++  >;
++
++  return {
++    total,
++    pagina,
++    porPagina,
++    filas: filas.map(({ tels, mails, ...resto }) => ({
++      ...resto,
++      telefonos: tels ? tels.split("|") : [],
++      correos: mails ? mails.split("|") : [],
++    })),
++  };
++}
++
++/**
++ * Categorías de gestión existentes (para el filtro de la vista Clientes).
++ * @param db Conexión SQLite.
++ * @since 0.2.0
++ */
++export function listarCategorias(db: Database.Database): string[] {
++  return (
++    db
++      .prepare(
++        `SELECT DISTINCT categoria_gestion AS c FROM clientes
++         WHERE categoria_gestion IS NOT NULL ORDER BY c`
++      )
++      .all() as Array<{ c: string }>
++  ).map((f) => f.c);
++}
++
++/**
++ * Últimas llamadas registradas desde Phoenix Desktop (tabla `gestiones`,
++ * categoría `'llamada'`), con RUT y nombre del cliente si corresponde.
++ * @param db Conexión SQLite.
++ * @param limite Máximo de filas (por defecto 30).
++ * @since 0.2.0
++ */
++export function historialLlamadas(db: Database.Database, limite = 30): Phoenix.LlamadaRegistrada[] {
++  return db
++    .prepare(
++      `SELECT g.id, g.fecha, g.cliente_id, c.rut, c.nombre_cliente, g.texto_libre, g.resultado
++       FROM gestiones g
++       LEFT JOIN clientes c ON c.id = g.cliente_id
++       WHERE g.categoria = 'llamada'
++       ORDER BY g.id DESC
++       LIMIT ?`
++    )
++    .all(limite) as Phoenix.LlamadaRegistrada[];
++}
+diff --git a/src/db/schema.sql b/src/db/schema.sql
+index 378e18c..433eefc 100644
+--- a/src/db/schema.sql
++++ b/src/db/schema.sql
+@@ -89,3 +89,24 @@ CREATE TABLE IF NOT EXISTS sync_log (
+     conflictos INTEGER,
+     estado TEXT CHECK(estado IN ('exitosa','parcial','fallida'))
+ );
++
++-- =====================================================================
++-- v0.2.0 — Integración cargador CSV/XLSX + Phoenix Mobile + servidor
++-- Sólo se AGREGAN objetos con IF NOT EXISTS: bases creadas con la
++-- versión 0.1.0 se actualizan solas al abrir la app, sin perder datos.
++-- =====================================================================
++
++-- Configuración clave/valor (IP del teléfono, puerto del servidor, etc.)
++CREATE TABLE IF NOT EXISTS configuracion (
++    clave TEXT PRIMARY KEY,
++    valor TEXT,
++    actualizado_en TEXT DEFAULT CURRENT_TIMESTAMP
++);
++
++-- Índices para búsquedas en la vista "Clientes" y el registro de llamadas.
++CREATE INDEX IF NOT EXISTS idx_clientes_rut ON clientes(rut);
++CREATE INDEX IF NOT EXISTS idx_clientes_categoria ON clientes(categoria_gestion);
++CREATE INDEX IF NOT EXISTS idx_telefonos_cliente ON telefonos(cliente_id);
++CREATE INDEX IF NOT EXISTS idx_correos_cliente ON correos(cliente_id);
++CREATE INDEX IF NOT EXISTS idx_gestiones_cliente ON gestiones(cliente_id);
++CREATE INDEX IF NOT EXISTS idx_gestiones_categoria ON gestiones(categoria);
+diff --git a/src/importacion/calculos.ts b/src/importacion/calculos.ts
+index 0d87753..d76df6e 100644
+--- a/src/importacion/calculos.ts
++++ b/src/importacion/calculos.ts
+@@ -1,4 +1,15 @@
+-/** Días de mora desde la fecha de 1er vencimiento hasta hoy. RF-33 */
++/**
++ * @file calculos.ts
++ * @description Indicadores derivados por cliente (RF-32, RF-33).
++ * v0.2.0: sólo se agregó documentación; la lógica no cambia.
++ */
++
++/**
++ * Días de mora desde la fecha de 1er vencimiento hasta hoy. RF-33
++ * @param fecha1erVencimientoIso Fecha `YYYY-MM-DD` (de `limpiarFechaYYYYMMDD`).
++ * @returns Días (mínimo 0) o `null` si no hay fecha válida.
++ * @example calcularDiasMora("2024-01-01") // días transcurridos hasta hoy
++ */
+ export function calcularDiasMora(fecha1erVencimientoIso: string | null): number | null {
+   if (!fecha1erVencimientoIso) return null;
+   const venc = new Date(`${fecha1erVencimientoIso}T00:00:00`);
+@@ -12,7 +23,12 @@ export function calcularDiasMora(fecha1erVencimientoIso: string | null): number
+   return Math.max(dias, 0);
+ }
+ 
+-/** % de recuperación = cuotas pagadas / cuotas pactadas. RF-32 */
++/**
++ * % de recuperación = cuotas pagadas / cuotas pactadas. RF-32
++ * @param cuotasPagadas Cuotas pagadas (null = 0).
++ * @param cuotasPactadas Cuotas totales; si es 0 o null el resultado es null.
++ * @returns Porcentaje con 2 decimales, p. ej. `33.33`.
++ */
+ export function calcularPctRecuperacion(
+   cuotasPagadas: number | null,
+   cuotasPactadas: number | null
+diff --git a/src/importacion/clasificador.ts b/src/importacion/clasificador.ts
+index f16bd86..8000038 100644
+--- a/src/importacion/clasificador.ts
++++ b/src/importacion/clasificador.ts
+@@ -1,8 +1,18 @@
++/**
++ * @file clasificador.ts
++ * @description Clasificación del texto libre de gestión en categorías
++ * estándar mediante palabras clave (RF-34, sin ML).
++ * v0.2.0: sólo se agregó documentación; la lógica no cambia.
++ * Para agregar reglas, editar `REGLAS_CLASIFICACION` (el orden importa:
++ * gana la primera categoría cuya palabra clave aparezca en el texto).
++ */
++
+ /** Quita tildes para que la comparación de palabras clave sea insensible a acentos. */
+ function sinTildes(texto: string): string {
+   return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+ }
+ 
++/** Pares [categoría, palabras clave]. Evaluadas en orden. */
+ const REGLAS_CLASIFICACION: Array<[string, string[]]> = [
+   ["pago realizado", ["paga", "pago realizado", "cumple compromiso", "cupon enviado paga"]],
+   [
+@@ -13,7 +23,12 @@ const REGLAS_CLASIFICACION: Array<[string, string[]]> = [
+   ["informado", ["recibe informacion", "se entrega informacion", "titular entrevistado"]],
+ ];
+ 
+-/** Clasifica el texto libre de gestión en una categoría estandarizada. RF-34 (sin ML). */
++/**
++ * Clasifica el texto libre de gestión en una categoría estandarizada. RF-34 (sin ML).
++ * @param textoLibre Texto de la columna GESTION.
++ * @returns `"pago realizado" | "en negociacion" | "sin contacto" | "informado" | "otro" | "sin gestion"`
++ * @example clasificarGestion("Cliente paga cuota") // "pago realizado"
++ */
+ export function clasificarGestion(textoLibre: string | null): string {
+   if (!textoLibre) return "sin gestion";
+   const texto = sinTildes(textoLibre.toLowerCase());
+diff --git a/src/importacion/importador.ts b/src/importacion/importador.ts
+index 2de1ff7..d7338da 100644
+--- a/src/importacion/importador.ts
++++ b/src/importacion/importador.ts
+@@ -1,11 +1,24 @@
+-import * as XLSX from "xlsx";
+-import * as path from "path";
++/**
++ * @file importador.ts
++ * @description Orquesta la importación: lee el archivo, mapea columnas,
++ * normaliza, calcula indicadores, clasifica la gestión y escribe en SQLite.
++ *
++ * Cambios v0.2.0 (lógica de inserción SIN cambios):
++ *  - La lectura ahora pasa por `leerArchivoTabular` (lectorArchivos.ts), que
++ *    acepta CSV/TSV/TXT además de Excel. Para Excel el resultado es idéntico
++ *    a la v0.1.0 (mismas opciones de SheetJS).
++ *  - Nueva función `importarArchivo` (nombre neutro); `importarExcel` se
++ *    mantiene como alias para no romper código existente.
++ *  - Parámetro opcional `nombreOriginal` (archivos subidos por HTTP).
++ *  - Si el RUT viene como `12.345.678-9` y no hay columna DV, se separan.
++ */
+ import Database from "better-sqlite3";
+ 
+ import { mapearFilas } from "./mapeoColumnas";
+-import { limpiarTexto, limpiarNumero, limpiarFechaYYYYMMDD } from "./normalizador";
++import { limpiarTexto, limpiarNumero, limpiarFechaYYYYMMDD, separarRut } from "./normalizador";
+ import { calcularDiasMora, calcularPctRecuperacion } from "./calculos";
+ import { clasificarGestion } from "./clasificador";
++import { leerArchivoTabular } from "./lectorArchivos";
+ 
+ export interface ResultadoHoja {
+   hoja: string;
+@@ -17,22 +30,32 @@ export interface ResultadoHoja {
+ export interface ResultadoImportacion {
+   archivo: string;
+   hojas: ResultadoHoja[];
++  /** Nuevo en v0.2.0: formato de origen (xlsx, csv, …). */
++  formato?: Phoenix.FormatoArchivo;
+ }
+ 
+ /**
+- * Importa todas las hojas de un archivo Excel de cartera hacia la base
+- * de datos local. Cubre RF-08 (importar sin estructura fija), RF-13
+- * (resumen por importación) y RF-14 (trazabilidad: guarda archivo/hoja
+- * de origen en cada cliente).
++ * Importa todas las hojas (Excel) o la tabla completa (CSV) de un archivo de
++ * cartera hacia la base de datos local. Cubre RF-08 (importar sin estructura
++ * fija), RF-13 (resumen por importación) y RF-14 (trazabilidad: guarda
++ * archivo/hoja de origen en cada cliente).
++ *
++ * @param db Conexión SQLite.
++ * @param rutaArchivo Ruta del `.xlsx/.xls/.xlsm/.ods/.csv/.tsv/.txt`.
++ * @param usuarioId Ejecutivo que importa (null mientras no exista login).
++ * @param nombreOriginal Nombre a registrar como origen (si difiere de la ruta).
++ * @returns Conteo de cargados / corregidos / con error por hoja.
++ * @since 0.2.0
+  */
+-export function importarExcel(
++export function importarArchivo(
+   db: Database.Database,
+-  rutaExcel: string,
+-  usuarioId: number | null = null
++  rutaArchivo: string,
++  usuarioId: number | null = null,
++  nombreOriginal?: string
+ ): ResultadoImportacion {
+-  const libro = XLSX.readFile(rutaExcel);
+-  const nombreArchivo = path.basename(rutaExcel);
+-  const resultado: ResultadoImportacion = { archivo: nombreArchivo, hojas: [] };
++  const leido = leerArchivoTabular(rutaArchivo, nombreOriginal);
++  const nombreArchivo = leido.archivo;
++  const resultado: ResultadoImportacion = { archivo: nombreArchivo, hojas: [], formato: leido.formato };
+ 
+   const insertarCliente = db.prepare(`
+     INSERT INTO clientes (
+@@ -73,12 +96,9 @@ export function importarExcel(
+     ) VALUES (?, ?, ?, ?, ?, ?)
+   `);
+ 
+-  for (const nombreHoja of libro.SheetNames) {
+-    const hoja = libro.Sheets[nombreHoja];
+-    const filasCrudas: Record<string, unknown>[] = XLSX.utils.sheet_to_json(hoja, {
+-      defval: null,
+-      raw: true,
+-    });
++  for (const tabla of leido.tablas) {
++    const nombreHoja = tabla.nombre;
++    const filasCrudas = tabla.filas;
+ 
+     if (filasCrudas.length === 0) continue;
+ 
+@@ -93,11 +113,15 @@ export function importarExcel(
+     // algo falla a mitad de la importación.
+     const procesarHoja = db.transaction((filasHoja: Record<string, unknown>[]) => {
+       for (const fila of filasHoja) {
+-        const rut = limpiarTexto(fila.rut);
+-        if (!rut) {
++        const rutCrudo = limpiarTexto(fila.rut);
++        if (!rutCrudo) {
+           conError++;
+           continue;
+         }
++        // v0.2.0: "12.345.678-9" → rut "12345678" + dv "9" (sólo si no hay DV aparte)
++        const dvColumna = limpiarTexto(fila.dv);
++        const separado = dvColumna ? { rut: rutCrudo, dv: dvColumna } : separarRut(rutCrudo);
++        const rut = separado.rut;
+ 
+         try {
+           const fechaOtorg = limpiarFechaYYYYMMDD(fila.fecha_otorgamiento);
+@@ -117,7 +141,7 @@ export function importarExcel(
+ 
+           const info = insertarCliente.run({
+             rut,
+-            dv: limpiarTexto(fila.dv),
++            dv: separado.dv,
+             nombre_cliente: limpiarTexto(fila.nombre_cliente),
+             monto_deuda: limpiarNumero(fila.monto_deuda),
+             monto_contenido: limpiarNumero(fila.monto_contenido),
+@@ -175,3 +199,15 @@ export function importarExcel(
+ 
+   return resultado;
+ }
++
++/**
++ * Alias de compatibilidad con la v0.1.0. Acepta ahora también CSV.
++ * @deprecated Usar `importarArchivo`. Se mantiene para no romper llamadas existentes.
++ */
++export function importarExcel(
++  db: Database.Database,
++  rutaExcel: string,
++  usuarioId: number | null = null
++): ResultadoImportacion {
++  return importarArchivo(db, rutaExcel, usuarioId);
++}
+diff --git a/src/importacion/mapeoColumnas.ts b/src/importacion/mapeoColumnas.ts
+index 94a81aa..40bc8ab 100644
+--- a/src/importacion/mapeoColumnas.ts
++++ b/src/importacion/mapeoColumnas.ts
+@@ -1,7 +1,22 @@
++/**
++ * @file mapeoColumnas.ts
++ * @description Traducción de encabezados de Excel/CSV a campos internos (RF-09).
++ *
++ * Cambios v0.2.0:
++ *  - Se conserva íntegro el diccionario original.
++ *  - Se agregan alias frecuentes en CSV / planillas manuales (sección
++ *    "ALIAS v0.2.0"), p. ej. `TELEFONO`, `EMAIL`, `NOMBRE CLIENTE`.
++ *  - El encabezado ahora se normaliza también quitando tildes y el BOM
++ *    UTF-8 (`\uFEFF`) que algunos CSV traen en la primera columna.
++ *  - Nueva función pública `resolverColumna` (la usa la vista previa).
++ */
++
+ /**
+  * Diccionario de alias -> campo interno. Se agregan variantes a medida
+  * que aparecen en nuevos archivos (cartera maestra, carteras individuales
+  * de cada ejecutivo, distintos meses). Cubre RF-09.
++ *
++ * Las claves deben escribirse en MAYÚSCULAS y sin tildes.
+  */
+ export const MAPEO_COLUMNAS: Record<string, string> = {
+   RUT: "rut",
+@@ -40,27 +55,122 @@ export const MAPEO_COLUMNAS: Record<string, string> = {
+   FONO2: "fono2",
+   FONO3: "fono3",
+   FONO4: "fono4",
++
++  // ------------------------- ALIAS v0.2.0 -------------------------
++  // Variantes habituales en CSV exportados o planillas armadas a mano.
++  "RUT CLIENTE": "rut",
++  RUT_CLIENTE: "rut",
++  DV: "dv",
++  "DIGITO VERIFICADOR": "dv",
++  "NOMBRE CLIENTE": "nombre_cliente",
++  NOMBRE_CLIENTE: "nombre_cliente",
++  "MONTO DEUDA": "monto_deuda",
++  MONTO_DEUDA: "monto_deuda",
++  "TRAMO MORA": "tramo_mora",
++  COMUNA: "comuna",
++  DIRECCION: "calle1",
++  TELEFONO: "fono1",
++  TELEFONO1: "fono1",
++  TELEFONO_1: "fono1",
++  TELEFONO2: "fono2",
++  TELEFONO_2: "fono2",
++  CELULAR: "fono1",
++  FONO: "fono1",
++  FONO_1: "fono1",
++  FONO_2: "fono2",
++  FONO_3: "fono3",
++  FONO_4: "fono4",
++  EMAIL: "correo_1",
++  CORREO: "correo_1",
++  MAIL: "correo_1",
+ };
+ 
+-/** Normaliza un encabezado crudo del Excel: quita espacios extra y pasa a mayúsculas. */
++/**
++ * Normaliza un encabezado crudo: quita BOM, tildes y espacios extra, y pasa
++ * a mayúsculas.
++ * @param col Encabezado tal como viene en el archivo.
++ * @returns Encabezado normalizado, p. ej. `" Teléfono  1 "` → `"TELEFONO 1"`.
++ */
+ function normalizarEncabezado(col: string): string {
+-  return String(col).trim().replace(/\s+/g, " ").toUpperCase();
++  return String(col)
++    .replace(/^\uFEFF/, "")
++    .normalize("NFD")
++    .replace(/[\u0300-\u036f]/g, "")
++    .trim()
++    .replace(/\s+/g, " ")
++    .toUpperCase();
++}
++
++/**
++ * Indica a qué campo interno corresponde un encabezado.
++ * Prueba primero el encabezado normalizado y luego con `_` en vez de espacios.
++ *
++ * @param colOriginal Encabezado del archivo.
++ * @returns Campo interno (ej. `"monto_deuda"`) o `null` si no se reconoce.
++ * @since 0.2.0
++ * @example resolverColumna("Deuda Total") // "monto_deuda"
++ */
++export function resolverColumna(colOriginal: string): string | null {
++  const clave = normalizarEncabezado(colOriginal);
++  return MAPEO_COLUMNAS[clave] ?? MAPEO_COLUMNAS[clave.replace(/ /g, "_")] ?? null;
+ }
+ 
+ /**
+  * Recibe un array de filas (objetos clave/valor tal como vienen del Excel)
+  * y devuelve un nuevo array con las claves renombradas a los campos internos.
+  * Las columnas no reconocidas se conservan con su nombre original.
++ *
++ * @param filas Filas crudas (`XLSX.utils.sheet_to_json` o lector CSV).
++ * @returns Filas con claves internas.
+  */
+ export function mapearFilas(filas: Record<string, unknown>[]): Record<string, unknown>[] {
+   return filas.map((fila) => {
+     const nueva: Record<string, unknown> = {};
+     for (const [colOriginal, valor] of Object.entries(fila)) {
+-      const clave = normalizarEncabezado(colOriginal);
+-      const candidato =
+-        MAPEO_COLUMNAS[clave] ?? MAPEO_COLUMNAS[clave.replace(/ /g, "_")];
+-      nueva[candidato ?? colOriginal] = valor;
++      const candidato = resolverColumna(colOriginal);
++      const destino = candidato ? casilleroLibre(nueva, candidato, valor) : colOriginal;
++      nueva[destino] = valor;
+     }
+     return nueva;
+   });
+ }
++
++/** Casilleros disponibles para campos de contacto con varias columnas. */
++const CASILLEROS: Record<string, string[]> = {
++  fono: ["fono1", "fono2", "fono3", "fono4"],
++  correo: ["correo_1", "correo_2", "correo_3"],
++};
++
++/**
++ * Si dos columnas del archivo apuntan al mismo teléfono/correo (p. ej.
++ * `TELEFONO` y `CELULAR` → `fono1`), mueve la segunda al siguiente
++ * casillero libre (`fono2`, …) para no perder datos. Para cualquier otro
++ * campo se mantiene el comportamiento original (la última columna gana).
++ * @since 0.2.0
++ */
++function casilleroLibre(fila: Record<string, unknown>, campo: string, valor: unknown): string {
++  const grupo = campo.startsWith("fono") ? CASILLEROS.fono : campo.startsWith("correo") ? CASILLEROS.correo : null;
++  if (!grupo || fila[campo] === undefined || fila[campo] === null || valor === null) return campo;
++  return grupo.find((c) => fila[c] === undefined || fila[c] === null) ?? campo;
++}
++
++/**
++ * Asigna campos internos a una lista de encabezados aplicando la misma
++ * regla de casilleros que `mapearFilas`: si dos columnas apuntan a `fono1`
++ * (p. ej. `TELEFONO` y `CELULAR`), la segunda se muestra como `fono2`.
++ * Lo usa la vista previa para mostrar el destino real de cada columna.
++ *
++ * @param encabezados Encabezados del archivo, en orden.
++ * @returns Campo interno por encabezado (`null` = columna ignorada).
++ * @since 0.2.0
++ */
++export function asignarCampos(encabezados: string[]): Array<string | null> {
++  const usados: Record<string, unknown> = {};
++  return encabezados.map((enc) => {
++    const campo = resolverColumna(enc);
++    if (!campo) return null;
++    const destino = casilleroLibre(usados, campo, true);
++    usados[destino] = true;
++    return destino;
++  });
++}
+diff --git a/src/importacion/normalizador.ts b/src/importacion/normalizador.ts
+index ddc1dac..7e8010c 100644
+--- a/src/importacion/normalizador.ts
++++ b/src/importacion/normalizador.ts
+@@ -1,3 +1,20 @@
++/**
++ * @file normalizador.ts
++ * @description Limpieza de texto, números y fechas provenientes de Excel o
++ * CSV (RF-10, RF-12).
++ *
++ * Cambios v0.2.0 (compatibles hacia atrás, misma firma en las 3 funciones):
++ *  - `limpiarNumero`: si el valor viene como TEXTO (típico de CSV) ahora
++ *    entiende formato chileno `"$ 1.234.567"`, `"1.234,5"` y también
++ *    `"1,234.5"`. Antes `parseFloat("1.234.567")` devolvía `1.234`.
++ *    Si el valor ya viene como número (Excel), el resultado es idéntico.
++ *  - `limpiarFechaYYYYMMDD`: agrega `dd/mm/aaaa`, `dd-mm-aaaa`,
++ *    `aaaa-mm-dd` y fechas seriales de Excel (ej. `45106`), que antes
++ *    producían fechas inválidas. Los casos `20230629`, `0` y `Date`
++ *    funcionan igual que antes.
++ */
++
++/** Textos que se consideran "vacío" aunque traigan algo escrito. */
+ const PLACEHOLDERS_VACIOS = new Set([
+   "",
+   "0",
+@@ -11,7 +28,15 @@ const PLACEHOLDERS_VACIOS = new Set([
+   "UNDEFINED",
+ ]);
+ 
+-/** Limpia un texto: quita espacios extra, y descarta placeholders sin significado. */
++/**
++ * Limpia un texto: quita espacios extra y descarta placeholders sin
++ * significado (`"S/V"`, `"N/A"`, `"0"`, `"-"`, …).
++ *
++ * @param valor Valor crudo de la celda.
++ * @returns Texto limpio o `null` si está vacío / es un placeholder.
++ * @example limpiarTexto("  Juan   Pérez ") // "Juan Pérez"
++ * @example limpiarTexto("S/V")              // null
++ */
+ export function limpiarTexto(valor: unknown): string | null {
+   if (valor === null || valor === undefined) return null;
+   const texto = String(valor).trim().replace(/\s+/g, " ");
+@@ -19,38 +44,155 @@ export function limpiarTexto(valor: unknown): string | null {
+   return texto;
+ }
+ 
+-/** Convierte a número; devuelve null si no es un número válido. */
++/**
++ * Convierte un texto con formato numérico local a un `number`.
++ * Reglas (prioridad al formato chileno):
++ *  - Se quitan `$`, `CLP`, `%` y espacios.
++ *  - Con `.` y `,` a la vez → el ÚLTIMO símbolo es el decimal.
++ *  - Sólo `,` → una coma es decimal (`"12,5"`); varias son miles.
++ *  - Sólo `.` → varios puntos son miles (`"1.234.567"`); un punto seguido
++ *    de exactamente 3 dígitos también es miles (`"1.500"` = 1500);
++ *    en otro caso es decimal (`"12.5"`).
++ *
++ * @param texto Texto ya convertido a string.
++ * @returns Número o `NaN` si no es interpretable.
++ * @since 0.2.0
++ */
++function textoANumero(texto: string): number {
++  let t = texto.replace(/\s/g, "").replace(/^\$|CLP|\$|%/gi, "");
++  if (t === "" || !/^[-+]?[\d.,]+$/.test(t)) return NaN;
++
++  const tienePunto = t.includes(".");
++  const tieneComa = t.includes(",");
++
++  if (tienePunto && tieneComa) {
++    const decimal = t.lastIndexOf(",") > t.lastIndexOf(".") ? "," : ".";
++    const miles = decimal === "," ? "." : ",";
++    t = t.split(miles).join("").replace(decimal, ".");
++  } else if (tieneComa) {
++    t = (t.match(/,/g)!.length > 1) ? t.replace(/,/g, "") : t.replace(",", ".");
++  } else if (tienePunto) {
++    const puntos = t.match(/\./g)!.length;
++    if (puntos > 1 || /^[-+]?[1-9]\d{0,2}\.\d{3}$/.test(t)) t = t.replace(/\./g, "");
++  }
++  return Number(t);
++}
++
++/**
++ * Convierte a número; devuelve `null` si no es un número válido.
++ *
++ * @param valor Número (Excel) o texto (CSV) a convertir.
++ * @returns Número finito o `null`.
++ * @example limpiarNumero(1500)          // 1500   (Excel, igual que v0.1.0)
++ * @example limpiarNumero("$ 1.234.567") // 1234567 (nuevo en v0.2.0)
++ * @example limpiarNumero("12,5")        // 12.5    (nuevo en v0.2.0)
++ */
+ export function limpiarNumero(valor: unknown): number | null {
+   if (valor === null || valor === undefined || valor === "") return null;
+-  const num = typeof valor === "number" ? valor : parseFloat(String(valor));
++  if (typeof valor === "number") return Number.isFinite(valor) ? valor : null;
++
++  const texto = String(valor).trim();
++  // Primero se prueba el camino original (parseFloat) cuando el texto es un
++  // número "limpio" sin separadores ambiguos, para no alterar resultados previos.
++  if (/^[-+]?\d+(\.\d+)?$/.test(texto) && !/^[-+]?[1-9]\d{0,2}\.\d{3}$/.test(texto)) {
++    const num = parseFloat(texto);
++    return Number.isFinite(num) ? num : null;
++  }
++  const num = textoANumero(texto);
+   return Number.isFinite(num) ? num : null;
+ }
+ 
++/** Rango de años aceptado como fecha válida de cartera. */
++const ANIO_MIN = 1900;
++const ANIO_MAX = 2100;
++
++/**
++ * Arma `YYYY-MM-DD` validando que la fecha exista (ej. rechaza 31/02).
++ * Se calcula en UTC para que el resultado no dependa de la zona horaria.
++ * @since 0.2.0
++ */
++function armarFechaIso(anio: number, mes: number, dia: number): string | null {
++  if (anio < ANIO_MIN || anio > ANIO_MAX) return null;
++  const f = new Date(Date.UTC(anio, mes - 1, dia));
++  if (f.getUTCFullYear() !== anio || f.getUTCMonth() !== mes - 1 || f.getUTCDate() !== dia) return null;
++  return f.toISOString().slice(0, 10);
++}
++
+ /**
+- * Las fechas en los archivos reales vienen como enteros tipo 20230629,
+- * o como 0 cuando no hay fecha. A veces SheetJS ya las entrega como
+- * objeto Date (cuando la celda está formateada como fecha en Excel).
+- * Devuelve 'YYYY-MM-DD' o null.
++ * Convierte un número de serie de Excel (días desde 1899-12-30) a ISO.
++ * @since 0.2.0
++ */
++function serialExcelAIso(serial: number): string | null {
++  const ms = Date.UTC(1899, 11, 30) + Math.floor(serial) * 86_400_000;
++  const f = new Date(ms);
++  return armarFechaIso(f.getUTCFullYear(), f.getUTCMonth() + 1, f.getUTCDate());
++}
++
++/**
++ * Normaliza una fecha a `'YYYY-MM-DD'`.
++ *
++ * Formatos soportados:
++ *  - Entero/texto `20230629` (formato de los archivos reales) — v0.1.0
++ *  - `0`, vacío o `"nan"` → `null` — v0.1.0
++ *  - Objeto `Date` (celda con formato fecha en Excel) — v0.1.0
++ *  - `29/06/2023`, `29-06-2023`, `29.06.2023` — **nuevo v0.2.0**
++ *  - `2023-06-29` — **nuevo v0.2.0**
++ *  - Serial de Excel `45106` — **nuevo v0.2.0**
++ *
++ * @param valor Valor crudo de la celda.
++ * @returns Fecha ISO o `null` si no es interpretable.
+  */
+ export function limpiarFechaYYYYMMDD(valor: unknown): string | null {
+   if (valor === null || valor === undefined) return null;
+ 
+   if (valor instanceof Date) {
+-    return valor.toISOString().slice(0, 10);
++    return Number.isNaN(valor.getTime()) ? null : valor.toISOString().slice(0, 10);
+   }
+ 
+-  const texto = String(valor).trim().split(".")[0];
++  const crudo = String(valor).trim();
++
++  // dd/mm/aaaa, dd-mm-aaaa o dd.mm.aaaa (CSV chileno). Se evalúa antes del
++  // split(".") original para no cortar "29.06.2023".
++  const dmy = crudo.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})(?:\s.*)?$/);
++  if (dmy) return armarFechaIso(+dmy[3], +dmy[2], +dmy[1]);
++
++  // aaaa-mm-dd (ISO, con o sin hora)
++  const ymd = crudo.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
++  if (ymd) return armarFechaIso(+ymd[1], +ymd[2], +ymd[3]);
++
++  const texto = crudo.split(".")[0];
+   if (texto === "0" || texto === "" || texto.toLowerCase() === "nan") return null;
+ 
+   if (/^\d{8}$/.test(texto)) {
+-    const anio = texto.slice(0, 4);
+-    const mes = texto.slice(4, 6);
+-    const dia = texto.slice(6, 8);
+-    const fecha = new Date(`${anio}-${mes}-${dia}T00:00:00`);
+-    if (Number.isNaN(fecha.getTime())) return null;
+-    return fecha.toISOString().slice(0, 10);
++    return armarFechaIso(+texto.slice(0, 4), +texto.slice(4, 6), +texto.slice(6, 8));
++  }
++
++  // Serial de Excel (≈ años 1954–2119). Cubre celdas fecha leídas con raw:true.
++  if (/^\d{5}$/.test(texto)) {
++    const serial = Number(texto);
++    if (serial >= 20000 && serial <= 80000) return serialExcelAIso(serial);
+   }
+ 
+-  const intento = new Date(texto);
+-  return Number.isNaN(intento.getTime()) ? null : intento.toISOString().slice(0, 10);
++  const intento = new Date(crudo);
++  if (Number.isNaN(intento.getTime())) return null;
++  const anio = intento.getFullYear();
++  if (anio < ANIO_MIN || anio > ANIO_MAX) return null;
++  return intento.toISOString().slice(0, 10);
++}
++
++/**
++ * Separa un RUT chileno escrito con dígito verificador (`"12.345.678-9"`,
++ * `"12345678-K"`) en cuerpo y DV. Si el RUT no trae guion se devuelve tal
++ * cual (caso de los Excel reales, donde el DV viene en `DDAS_DRT_PPAL`).
++ *
++ * @param rut RUT ya limpiado con `limpiarTexto`.
++ * @returns `{ rut, dv }`; `dv` es `null` si no venía incluido.
++ * @since 0.2.0
++ * @example separarRut("12.345.678-9") // { rut: "12345678", dv: "9" }
++ * @example separarRut("12345678")     // { rut: "12345678", dv: null }
++ */
++export function separarRut(rut: string): { rut: string; dv: string | null } {
++  const m = rut.replace(/\s/g, "").match(/^([\d.]+)-([\dkK])$/);
++  if (!m) return { rut, dv: null };
++  return { rut: m[1].replace(/\./g, ""), dv: m[2].toUpperCase() };
+ }
+diff --git a/src/main.ts b/src/main.ts
+index c0cc9b8..49a680c 100644
+--- a/src/main.ts
++++ b/src/main.ts
+@@ -1,21 +1,94 @@
+-import { app, BrowserWindow, ipcMain, dialog } from "electron";
++/**
++ * @file main.ts
++ * @description Proceso principal de Electron (BACKEND de la app de escritorio).
++ *
++ * Responsabilidades:
++ *  1. Abrir la base SQLite local del usuario.
++ *  2. Crear la ventana principal (FRONTEND / renderer).
++ *  3. Registrar los canales IPC (`ipc/manejadoresIpc.ts`).
++ *  4. Iniciar el servidor HTTP embebido (`servidor/gestorServidor.ts`) para
++ *     la arquitectura cliente-servidor (navegador / otros PC).
++ *
++ * Cambios v0.2.0:
++ *  - Los handlers IPC se movieron a `ipc/manejadoresIpc.ts` (mismos canales).
++ *  - Se inicia el servidor HTTP embebido (si falla, la app sigue por IPC).
++ *  - Ventana más amplia (1280×800, mínimo 1024×680) para el nuevo diseño.
++ *  - Modo servidor sin ventana: `"ERS Phoenix.exe" --servidor` (o
++ *    `electron . --servidor`). Sirve para dejar un PC como servidor central
++ *    usando el MISMO instalador. Escucha en la red local en el puerto
++ *    configurado (3737 por defecto, o `--puerto=NNNN`).
++ */
++import { app, BrowserWindow } from "electron";
+ import * as path from "path";
++import Database from "better-sqlite3";
+ 
+ import { obtenerConexion, cerrarConexion } from "./db/conexion";
+-import { importarExcel } from "./importacion/importador";
+-import {
+-  contarClientes,
+-  topClientesPorDeuda,
+-  distribucionCategorias,
+-  historialImportaciones,
+-} from "./db/consultas";
++import { registrarManejadoresIpc } from "./ipc/manejadoresIpc";
++import { arrancarSegunConfig, detenerServidor, leerConfigServidor } from "./servidor/gestorServidor";
++import { iniciarServidor } from "./servidor/servidorHttp";
++
++/** `true` si la app se abrió con `--servidor` (sin ventana). */
++const MODO_SOLO_SERVIDOR = process.argv.includes("--servidor");
++
++/**
++ * Lee `--puerto=NNNN` de la línea de comandos.
++ * @returns Puerto indicado o `null` si no viene.
++ */
++function puertoDeArgumentos(): number | null {
++  const arg = process.argv.find((a) => a.startsWith("--puerto="));
++  const p = arg ? Number(arg.split("=")[1]) : NaN;
++  return Number.isInteger(p) && p >= 1024 && p <= 65535 ? p : null;
++}
++
++/**
++ * Arranca sólo el backend HTTP, sin ventana, visible en la red local.
++ * Si el puerto está ocupado informa el error y cierra la app.
++ */
++async function arrancarSoloServidor(): Promise<void> {
++  const puerto = puertoDeArgumentos() ?? leerConfigServidor(obtenerDb()).puerto;
++  try {
++    const srv = await iniciarServidor(obtenerDb(), {
++      puerto,
++      accesoRed: true,
++      modo: "standalone",
++      token: process.env.PHOENIX_TOKEN,
++    });
++    console.log("[ERS Phoenix] Modo servidor. Base:", rutaBaseDatos());
++    srv.estado().urls.forEach((u) => console.log("[ERS Phoenix] Abrir:", u));
++  } catch (e) {
++    console.error("[ERS Phoenix] No se pudo iniciar el servidor:", (e as Error).message);
++    app.exit(1);
++  }
++}
+ 
+ let ventanaPrincipal: BrowserWindow | null = null;
++let db: Database.Database | null = null;
+ 
++/**
++ * Ruta de la base local del usuario. `app.getPath('userData')` apunta a una
++ * carpeta propia de la app (ej. %APPDATA%/ers-phoenix en Windows), que
++ * persiste entre ejecuciones y es distinta para cada usuario/PC — esto es
++ * justo lo que RNF-13/RNF-18 piden: cada usuario con su copia local.
++ */
++function rutaBaseDatos(): string {
++  return path.join(app.getPath("userData"), "phoenix_local.db");
++}
++
++/** Devuelve la conexión abierta (la abre si hiciera falta). */
++function obtenerDb(): Database.Database {
++  if (!db) db = obtenerConexion(rutaBaseDatos());
++  return db;
++}
++
++/** Crea la ventana principal y carga la interfaz. */
+ function crearVentana(): void {
+   ventanaPrincipal = new BrowserWindow({
+-    width: 1100,
+-    height: 720,
++    width: 1280,
++    height: 800,
++    minWidth: 1024,
++    minHeight: 680,
++    title: "ERS Phoenix",
++    backgroundColor: "#f6f4f1",
+     webPreferences: {
+       preload: path.join(__dirname, "preload.js"),
+       contextIsolation: true,
+@@ -24,67 +97,33 @@ function crearVentana(): void {
+   });
+ 
+   ventanaPrincipal.loadFile(path.join(__dirname, "renderer", "index.html"));
++  ventanaPrincipal.on("closed", () => (ventanaPrincipal = null));
+ }
+ 
+-app.whenReady().then(() => {
+-  // Base de datos local del usuario. app.getPath('userData') apunta a una
+-  // carpeta propia de la app (ej. %APPDATA%/ers-phoenix en Windows), que
+-  // persiste entre ejecuciones y es distinta para cada usuario/PC — esto
+-  // es justo lo que RNF-13/RNF-18 piden: cada usuario con su copia local.
+-  const rutaDb = path.join(app.getPath("userData"), "phoenix_local.db");
+-  obtenerConexion(rutaDb);
++app.whenReady().then(async () => {
++  obtenerDb();
+ 
++  if (MODO_SOLO_SERVIDOR) {
++    await arrancarSoloServidor();
++    return; // sin ventana: la app sigue viva mientras el servidor escuche
++  }
++
++  registrarManejadoresIpc(obtenerDb, () => ventanaPrincipal);
+   crearVentana();
+ 
++  // Servidor HTTP embebido (cliente-servidor). No bloquea la ventana.
++  arrancarSegunConfig(obtenerDb()).then((e) => {
++    if (e.activo) console.log("[servidor] Escuchando en", e.urls.join(", "));
++  });
++
+   app.on("activate", () => {
+     if (BrowserWindow.getAllWindows().length === 0) crearVentana();
+   });
+ });
+ 
+-app.on("window-all-closed", () => {
++app.on("window-all-closed", async () => {
++  await detenerServidor();
+   cerrarConexion();
++  db = null;
+   if (process.platform !== "darwin") app.quit();
+ });
+-
+-// ---------------------------------------------------------------------
+-// Handlers IPC: la interfaz (renderer) nunca toca la base de datos
+-// directamente por seguridad; todo pasa por estos "botones" expuestos
+-// desde el proceso principal.
+-// ---------------------------------------------------------------------
+-
+-ipcMain.handle("dialogo:elegir-excel", async () => {
+-  const resultado = await dialog.showOpenDialog(ventanaPrincipal!, {
+-    title: "Selecciona el archivo Excel de cartera",
+-    filters: [{ name: "Excel", extensions: ["xlsx", "xls"] }],
+-    properties: ["openFile"],
+-  });
+-  if (resultado.canceled || resultado.filePaths.length === 0) return null;
+-  return resultado.filePaths[0];
+-});
+-
+-ipcMain.handle("importacion:ejecutar", async (_evento, rutaExcel: string) => {
+-  const rutaDb = path.join(app.getPath("userData"), "phoenix_local.db");
+-  const db = obtenerConexion(rutaDb);
+-  try {
+-    const resultado = importarExcel(db, rutaExcel);
+-    return { ok: true, resultado };
+-  } catch (err) {
+-    return { ok: false, error: (err as Error).message };
+-  }
+-});
+-
+-ipcMain.handle("resumen:obtener", async () => {
+-  const rutaDb = path.join(app.getPath("userData"), "phoenix_local.db");
+-  const db = obtenerConexion(rutaDb);
+-  return {
+-    totalClientes: contarClientes(db),
+-    topDeuda: topClientesPorDeuda(db, 5),
+-    categorias: distribucionCategorias(db),
+-  };
+-});
+-
+-ipcMain.handle("importaciones:historial", async () => {
+-  const rutaDb = path.join(app.getPath("userData"), "phoenix_local.db");
+-  const db = obtenerConexion(rutaDb);
+-  return historialImportaciones(db);
+-});
+diff --git a/src/preload.ts b/src/preload.ts
+index 48f586a..ccf9f4a 100644
+--- a/src/preload.ts
++++ b/src/preload.ts
+@@ -1,13 +1,56 @@
+-import { contextBridge, ipcRenderer } from "electron";
++/**
++ * @file preload.ts
++ * @description Puente seguro entre la ventana (renderer) y el backend (main).
++ * Expone `window.phoenixAPI` con `contextBridge` (contextIsolation activo).
++ *
++ * v0.2.0: se mantienen los 4 métodos originales con el mismo nombre y se
++ * agregan los nuevos. `elegirArchivoExcel` / `importarExcel` siguen
++ * existiendo y ahora también aceptan CSV.
++ */
++import { contextBridge, ipcRenderer, webUtils } from "electron";
+ 
+ contextBridge.exposeInMainWorld("phoenixAPI", {
+-  elegirArchivoExcel: (): Promise<string | null> =>
+-    ipcRenderer.invoke("dialogo:elegir-excel"),
++  // ------------------------- Métodos originales v0.1.0 -------------------------
+ 
+-  importarExcel: (rutaExcel: string) =>
+-    ipcRenderer.invoke("importacion:ejecutar", rutaExcel),
++  /** Abre el selector de archivos (Excel o CSV). Devuelve la ruta o null. */
++  elegirArchivoExcel: (): Promise<string | null> => ipcRenderer.invoke("dialogo:elegir-excel"),
+ 
++  /** Importa un archivo (Excel o CSV) por su ruta. */
++  importarExcel: (rutaExcel: string) => ipcRenderer.invoke("importacion:ejecutar", rutaExcel),
++
++  /** Resumen de cartera para el panel. */
+   obtenerResumen: () => ipcRenderer.invoke("resumen:obtener"),
+ 
++  /** Historial de importaciones. */
+   obtenerHistorial: () => ipcRenderer.invoke("importaciones:historial"),
++
++  // ------------------------------ Métodos v0.2.0 ------------------------------
++
++  /** Alias con nombre neutro de `elegirArchivoExcel`. */
++  elegirArchivoCartera: (): Promise<string | null> => ipcRenderer.invoke("dialogo:elegir-excel"),
++
++  /** Alias con nombre neutro de `importarExcel`. */
++  importarArchivo: (ruta: string) => ipcRenderer.invoke("importacion:ejecutar", ruta),
++
++  /** Vista previa sin importar. */
++  previsualizarArchivo: (ruta: string) => ipcRenderer.invoke("importacion:previsualizar", ruta),
++
++  /**
++   * Ruta en disco de un archivo arrastrado a la ventana (drag & drop).
++   * Usa `webUtils.getPathForFile` (reemplazo oficial de `File.path`).
++   */
++  rutaDeArchivo: (archivo: File): string => webUtils.getPathForFile(archivo),
++
++  listarClientes: (filtro: unknown) => ipcRenderer.invoke("clientes:listar", filtro),
++  listarCategorias: () => ipcRenderer.invoke("clientes:categorias"),
++
++  obtenerMovil: () => ipcRenderer.invoke("movil:obtener"),
++  probarMovil: (ip?: string) => ipcRenderer.invoke("movil:probar", ip),
++  llamarMovil: (numero: string, clienteId?: number | null) => ipcRenderer.invoke("movil:llamar", numero, clienteId),
++  listarLlamadas: () => ipcRenderer.invoke("movil:llamadas"),
++
++  estadoServidor: () => ipcRenderer.invoke("servidor:estado"),
++  configurarServidor: (config: unknown) => ipcRenderer.invoke("servidor:configurar", config),
++
++  abrirExterno: (url: string) => ipcRenderer.invoke("sistema:abrir-externo", url),
+ });
+diff --git a/src/renderer/index.html b/src/renderer/index.html
+index 87b6a66..0d3b062 100644
+--- a/src/renderer/index.html
++++ b/src/renderer/index.html
+@@ -1,70 +1,304 @@
+ <!DOCTYPE html>
++<!--
++  ERS Phoenix — Interfaz (renderer)
++  v0.2.0: rediseño con navegación lateral. Funciona dentro de Electron (IPC)
++  y desde un navegador servido por el backend HTTP (ver renderer/api.ts).
++  Las vistas son <section data-vista="..."> y se muestran de a una.
++-->
+ <html lang="es">
+ <head>
+   <meta charset="UTF-8" />
+-  <title>ERS Phoenix - Gestión de Cartera</title>
++  <meta name="viewport" content="width=device-width, initial-scale=1" />
++  <meta http-equiv="Content-Security-Policy"
++        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:" />
++  <title>ERS Phoenix — Gestión de cartera</title>
+   <link rel="stylesheet" href="styles.css" />
+ </head>
+ <body>
+-  <header>
+-    <h1>ERS Phoenix — Sistema de Gestión de Cartera</h1>
+-  </header>
+-
+-  <main>
+-    <section class="acciones">
+-      <button id="btn-importar">📂 Importar archivo Excel</button>
+-      <button id="btn-actualizar">🔄 Actualizar resumen</button>
+-      <span id="estado-importacion"></span>
+-    </section>
+-
+-    <section class="resumen">
+-      <h2>Resumen de cartera</h2>
+-      <p id="total-clientes">Total de clientes: —</p>
+-
+-      <h3>Top 5 por monto de deuda</h3>
+-      <table id="tabla-top">
+-        <thead>
+-          <tr>
+-            <th>RUT</th>
+-            <th>Nombre</th>
+-            <th>Deuda</th>
+-            <th>Días de mora</th>
+-            <th>Gestión</th>
+-          </tr>
+-        </thead>
+-        <tbody></tbody>
+-      </table>
+-
+-      <h3>Distribución por categoría de gestión</h3>
+-      <table id="tabla-categorias">
+-        <thead>
+-          <tr>
+-            <th>Categoría</th>
+-            <th>Cantidad</th>
+-          </tr>
+-        </thead>
+-        <tbody></tbody>
+-      </table>
+-    </section>
+-
+-    <section class="historial">
+-      <h2>Historial de importaciones</h2>
+-      <table id="tabla-historial">
+-        <thead>
+-          <tr>
+-            <th>Fecha</th>
+-            <th>Archivo</th>
+-            <th>Hoja</th>
+-            <th>Cargados</th>
+-            <th>Corregidos</th>
+-            <th>Con error</th>
+-          </tr>
+-        </thead>
+-        <tbody></tbody>
+-      </table>
+-    </section>
+-  </main>
++  <div class="app">
++    <!-- ============================ NAVEGACIÓN ============================ -->
++    <aside class="lateral">
++      <div class="marca">
++        <span class="marca-simbolo" aria-hidden="true"></span>
++        <div>
++          <strong>ERS Phoenix</strong>
++          <span class="marca-sub">Gestión de cartera</span>
++        </div>
++      </div>
+ 
++      <nav class="menu" aria-label="Secciones">
++        <button class="menu-item activo" data-ir="panel">Panel</button>
++        <button class="menu-item" data-ir="importar">Importar cartera</button>
++        <button class="menu-item" data-ir="clientes">Clientes</button>
++        <button class="menu-item" data-ir="telefono">Teléfono</button>
++        <button class="menu-item" data-ir="historial">Historial</button>
++        <button class="menu-item" data-ir="servidor">Servidor</button>
++      </nav>
++
++      <div class="estados">
++        <button class="estado" data-ir="telefono" id="estado-telefono">
++          <span class="punto"></span><span class="estado-texto">Teléfono sin configurar</span>
++        </button>
++        <button class="estado" data-ir="servidor" id="estado-servidor">
++          <span class="punto"></span><span class="estado-texto">Servidor…</span>
++        </button>
++        <p class="modo" id="modo-app"></p>
++      </div>
++    </aside>
++
++    <main class="contenido">
++      <!-- =============================== PANEL =============================== -->
++      <section class="vista activa" data-vista="panel">
++        <header class="cabecera">
++          <div>
++            <h1>Panel de cartera</h1>
++            <p class="bajada" id="panel-bajada">Resumen de los clientes cargados.</p>
++          </div>
++          <div class="acciones-cabecera">
++            <button class="btn secundario" id="btn-actualizar">Actualizar</button>
++            <button class="btn primario" data-ir="importar">Importar cartera</button>
++          </div>
++        </header>
++
++        <div class="vacio" id="panel-vacio" hidden>
++          <h2>Aún no hay clientes cargados</h2>
++          <p>Importa un archivo Excel o CSV de cartera para ver aquí la deuda, la mora y las gestiones.</p>
++          <button class="btn primario" data-ir="importar">Importar mi primer archivo</button>
++        </div>
++
++        <div id="panel-datos">
++          <div class="franja-mora" aria-label="Deuda por tramo de mora">
++            <div class="franja-titulo">
++              <h2>Deuda por tramo de mora</h2>
++              <span class="cifra-grande" id="kpi-deuda">$0</span>
++            </div>
++            <div class="franja" id="franja-tramos"></div>
++            <ul class="franja-leyenda" id="leyenda-tramos"></ul>
++          </div>
++
++          <dl class="indicadores">
++            <div><dt>Clientes</dt><dd class="cifra" id="kpi-clientes">0</dd></div>
++            <div><dt>Mora promedio</dt><dd class="cifra" id="kpi-mora">—</dd></div>
++            <div><dt>Recuperación promedio</dt><dd class="cifra" id="kpi-recuperacion">—</dd></div>
++            <div><dt>Con teléfono</dt><dd class="cifra" id="kpi-telefono">0</dd></div>
++            <div><dt>Llamadas hoy</dt><dd class="cifra" id="kpi-llamadas">0</dd></div>
++          </dl>
++
++          <div class="rejilla-dos">
++            <section class="bloque">
++              <h2>Mayores deudas</h2>
++              <div class="tabla-envoltura">
++                <table id="tabla-top">
++                  <thead>
++                    <tr><th>RUT</th><th>Nombre</th><th class="num">Deuda</th><th class="num">Días de mora</th><th>Gestión</th></tr>
++                  </thead>
++                  <tbody></tbody>
++                </table>
++              </div>
++            </section>
++            <section class="bloque">
++              <h2>Clientes por resultado de gestión</h2>
++              <ul class="barras" id="barras-categorias"></ul>
++            </section>
++          </div>
++        </div>
++      </section>
++
++      <!-- ============================== IMPORTAR ============================== -->
++      <section class="vista" data-vista="importar">
++        <header class="cabecera">
++          <div>
++            <h1>Importar cartera</h1>
++            <p class="bajada">Excel (.xlsx, .xls, .xlsm, .ods) o texto delimitado (.csv, .tsv, .txt). Revisa la vista previa antes de cargar.</p>
++          </div>
++        </header>
++
++        <div class="zona-carga" id="zona-carga" tabindex="0" role="button" aria-label="Elegir archivo de cartera">
++          <div class="zona-icono" aria-hidden="true"></div>
++          <p class="zona-principal">Arrastra aquí el archivo de cartera</p>
++          <p class="zona-secundaria">o <span class="enlace">elígelo desde tu equipo</span></p>
++          <p class="zona-nota">El separador del CSV (; , tab |) y la codificación (UTF-8 o Windows) se detectan solos.</p>
++        </div>
++
++        <div id="previa" hidden>
++          <div class="previa-cabecera">
++            <div>
++              <h2 id="previa-nombre"></h2>
++              <p class="bajada" id="previa-meta"></p>
++            </div>
++            <div class="acciones-cabecera">
++              <button class="btn secundario" id="btn-cancelar-previa">Elegir otro archivo</button>
++              <button class="btn primario" id="btn-confirmar-importacion">Importar</button>
++            </div>
++          </div>
++
++          <div class="pestanas" id="previa-pestanas" role="tablist"></div>
++          <div id="previa-hoja"></div>
++        </div>
++
++        <div class="resultado" id="resultado-importacion" hidden></div>
++      </section>
++
++      <!-- ============================== CLIENTES ============================== -->
++      <section class="vista" data-vista="clientes">
++        <header class="cabecera">
++          <div>
++            <h1>Clientes</h1>
++            <p class="bajada" id="clientes-bajada">Busca por RUT o nombre y llama desde el teléfono conectado.</p>
++          </div>
++        </header>
++
++        <div class="filtros">
++          <input type="search" id="buscar-cliente" placeholder="Buscar por RUT o nombre" autocomplete="off" />
++          <select id="filtro-categoria"><option value="">Todas las gestiones</option></select>
++        </div>
++
++        <div class="tabla-envoltura">
++          <table id="tabla-clientes">
++            <thead>
++              <tr>
++                <th>RUT</th><th>Nombre</th><th class="num">Deuda</th><th class="num">Mora</th>
++                <th>Tramo</th><th>Gestión</th><th>Teléfonos</th>
++              </tr>
++            </thead>
++            <tbody></tbody>
++          </table>
++        </div>
++
++        <div class="paginacion">
++          <button class="btn secundario" id="pag-anterior">Anterior</button>
++          <span id="pag-info"></span>
++          <button class="btn secundario" id="pag-siguiente">Siguiente</button>
++        </div>
++      </section>
++
++      <!-- ============================== TELÉFONO ============================== -->
++      <section class="vista" data-vista="telefono">
++        <header class="cabecera">
++          <div>
++            <h1>Teléfono</h1>
++            <p class="bajada">Phoenix Mobile realiza las llamadas con la SIM del teléfono Android, conectado por Wi‑Fi.</p>
++          </div>
++        </header>
++
++        <div class="rejilla-dos mitades">
++          <section class="bloque">
++            <h2>Conexión</h2>
++            <label class="campo">
++              <span>IP que muestra Phoenix Mobile</span>
++              <input type="text" id="movil-ip" placeholder="192.168.1.25" inputmode="decimal" />
++            </label>
++            <button class="btn primario" id="btn-probar-movil">Probar conexión</button>
++
++            <div class="ficha-movil" id="ficha-movil" data-estado="desconocido">
++              <p class="ficha-titulo" id="movil-titulo">Sin probar</p>
++              <p id="movil-detalle" class="bajada">Escribe la IP y prueba la conexión.</p>
++            </div>
++
++            <h2 class="separado">Llamada manual</h2>
++            <label class="campo">
++              <span>Número</span>
++              <input type="tel" id="movil-numero" placeholder="+56912345678" />
++            </label>
++            <button class="btn primario" id="btn-llamar-manual">Llamar</button>
++          </section>
++
++          <section class="bloque">
++            <h2>Cómo conectar</h2>
++            <ol class="pasos">
++              <li>Instala y abre <strong>Phoenix Mobile</strong> en el teléfono Android.</li>
++              <li>Acepta el permiso para realizar llamadas.</li>
++              <li>Conecta el PC y el teléfono a la misma red Wi‑Fi.</li>
++              <li>Escribe la IP que aparece en el teléfono y pulsa «Probar conexión».</li>
++              <li>En <em>Clientes</em>, pulsa un número para llamar. Cada llamada queda registrada.</li>
++            </ol>
++
++          </section>
++        </div>
++
++        <section class="bloque separado">
++          <h2>Últimas llamadas</h2>
++          <div class="tabla-envoltura">
++            <table id="tabla-llamadas">
++              <thead><tr><th>Fecha</th><th>Cliente</th><th>Detalle</th><th>Resultado</th></tr></thead>
++              <tbody></tbody>
++            </table>
++          </div>
++        </section>
++      </section>
++
++      <!-- ============================== HISTORIAL ============================== -->
++      <section class="vista" data-vista="historial">
++        <header class="cabecera">
++          <div>
++            <h1>Historial de importaciones</h1>
++            <p class="bajada">Una fila por cada hoja o archivo CSV cargado.</p>
++          </div>
++        </header>
++        <div class="tabla-envoltura">
++          <table id="tabla-historial">
++            <thead>
++              <tr>
++                <th>Fecha</th><th>Archivo</th><th>Hoja</th>
++                <th class="num">Cargados</th><th class="num">Corregidos</th><th class="num">Con error</th>
++              </tr>
++            </thead>
++            <tbody></tbody>
++          </table>
++        </div>
++      </section>
++
++      <!-- ============================== SERVIDOR ============================== -->
++      <section class="vista" data-vista="servidor">
++        <header class="cabecera">
++          <div>
++            <h1>Servidor</h1>
++            <p class="bajada">El backend atiende a esta ventana y, si lo permites, a navegadores de otros equipos.</p>
++          </div>
++        </header>
++
++        <div class="rejilla-dos">
++          <section class="bloque">
++            <h2>Estado</h2>
++            <div class="ficha-movil" id="ficha-servidor" data-estado="desconocido">
++              <p class="ficha-titulo" id="servidor-titulo">Consultando…</p>
++              <ul class="urls" id="servidor-urls"></ul>
++            </div>
++
++            <form id="form-servidor" class="config-servidor">
++              <label class="interruptor"><input type="checkbox" id="srv-habilitado" /> <span>Servidor HTTP activo</span></label>
++              <label class="interruptor"><input type="checkbox" id="srv-red" /> <span>Permitir acceso desde otros equipos de la red</span></label>
++              <label class="campo corto"><span>Puerto</span><input type="number" id="srv-puerto" min="1024" max="65535" /></label>
++              <button type="submit" class="btn primario">Guardar y reiniciar servidor</button>
++              <p class="bajada" id="srv-nota"></p>
++            </form>
++          </section>
++
++          <section class="bloque">
++            <h2>Cómo se conectan las piezas</h2>
++            <div class="diagrama" aria-label="Diagrama de arquitectura">
++              <div class="d-fila">
++                <div class="d-caja cliente">Ventana Electron<small>renderer</small></div>
++                <div class="d-caja cliente">Navegador u otro PC<small>http://…:3737</small></div>
++              </div>
++              <div class="d-fila d-flechas"><span>IPC</span><span>HTTP / JSON</span></div>
++              <div class="d-fila"><div class="d-caja nucleo">Servicios del backend<small>cartera, importación y llamadas</small></div></div>
++              <div class="d-fila d-flechas"><span>SQL</span><span>Wi‑Fi :8765</span></div>
++              <div class="d-fila">
++                <div class="d-caja dato">SQLite local<small>phoenix_local.db</small></div>
++                <div class="d-caja movil">Phoenix Mobile<small>Android con SIM</small></div>
++              </div>
++            </div>
++            <p class="bajada separado">Para montar sólo el backend sin ventana: <code>npm run servidor</code>.</p>
++          </section>
++        </div>
++      </section>
++    </main>
++  </div>
++
++  <div class="avisos" id="avisos" aria-live="polite"></div>
++
++  <script src="api.js"></script>
+   <script src="renderer.js"></script>
+ </body>
+ </html>
+diff --git a/src/renderer/renderer.ts b/src/renderer/renderer.ts
+index 3a5ccf2..fa38377 100644
+--- a/src/renderer/renderer.ts
++++ b/src/renderer/renderer.ts
+@@ -1,131 +1,761 @@
+-// Tipos de la API expuesta por preload.ts (ver src/preload.ts).
+-// Declarada aquí porque el renderer corre en un contexto de navegador
+-// aislado y no comparte tipos automáticamente con el proceso principal.
+-interface PhoenixAPI {
+-  elegirArchivoExcel(): Promise<string | null>;
+-  importarExcel(rutaExcel: string): Promise<{
+-    ok: boolean;
+-    resultado?: {
+-      archivo: string;
+-      hojas: Array<{ hoja: string; cargados: number; corregidos: number; conError: number }>;
+-    };
+-    error?: string;
+-  }>;
+-  obtenerResumen(): Promise<{
+-    totalClientes: number;
+-    topDeuda: Array<{
+-      rut: string;
+-      nombre_cliente: string | null;
+-      monto_deuda: number | null;
+-      dias_mora: number | null;
+-      categoria_gestion: string | null;
+-    }>;
+-    categorias: Array<{ categoria_gestion: string; total: number }>;
+-  }>;
+-  obtenerHistorial(): Promise<
+-    Array<{
+-      archivo_nombre: string;
+-      hoja_nombre: string;
+-      fecha: string;
+-      registros_cargados: number;
+-      registros_corregidos: number;
+-      registros_con_error: number;
+-    }>
+-  >;
+-}
+-
+-declare const phoenixAPI: PhoenixAPI;
+-
+-const btnImportar = document.getElementById("btn-importar") as HTMLButtonElement;
+-const btnActualizar = document.getElementById("btn-actualizar") as HTMLButtonElement;
+-const estadoImportacion = document.getElementById("estado-importacion")!;
+-const totalClientesEl = document.getElementById("total-clientes")!;
+-const tablaTopBody = document.querySelector("#tabla-top tbody")!;
+-const tablaCategoriasBody = document.querySelector("#tabla-categorias tbody")!;
+-const tablaHistorialBody = document.querySelector("#tabla-historial tbody")!;
+-
+-function formatoMoneda(valor: number | null): string {
+-  if (valor === null) return "—";
+-  return valor.toLocaleString("es-CL", { maximumFractionDigits: 0 });
++/**
++ * @file renderer.ts
++ * @description Lógica de la interfaz (FRONTEND). Usa el objeto global `Api`
++ * definido en `api.ts`, por lo que funciona igual dentro de Electron que en
++ * un navegador conectado al servidor HTTP.
++ *
++ * Organización (cada bloque corresponde a una vista de index.html):
++ *  - Utilidades: escape HTML, formatos, avisos, navegación.
++ *  - Panel:      cargarResumen (v0.1.0, ampliada), pintarFranjaTramos.
++ *  - Importar:   seleccionarArchivo, mostrarPrevia, confirmarImportacion.
++ *  - Clientes:   cargarClientes, llamarCliente.
++ *  - Teléfono:   cargarMovil, probarConexionMovil, cargarLlamadas.
++ *  - Historial:  cargarHistorial (v0.1.0).
++ *  - Servidor:   cargarServidor, guardarServidor.
++ *
++ * v0.2.0: reescrito para el nuevo diseño. Todo texto que viene de los
++ * archivos importados pasa por `esc()` antes de insertarse en el HTML
++ * (la v0.1.0 lo insertaba sin escapar).
++ */
++
++// =====================================================================
++// Utilidades
++// =====================================================================
++
++/** Atajo para obtener un elemento por id (lanza si no existe). */
++function $(id: string): HTMLElement {
++  const el = document.getElementById(id);
++  if (!el) throw new Error(`Falta #${id} en index.html`);
++  return el;
+ }
+ 
++/**
++ * Escapa texto para insertarlo de forma segura con innerHTML.
++ * @param valor Cualquier valor (null/undefined → "").
++ */
++function esc(valor: unknown): string {
++  return String(valor ?? "")
++    .replace(/&/g, "&amp;")
++    .replace(/</g, "&lt;")
++    .replace(/>/g, "&gt;")
++    .replace(/"/g, "&quot;")
++    .replace(/'/g, "&#39;");
++}
++
++/** Formato peso chileno sin decimales: 1234567 → "$1.234.567". (v0.1.0 ampliada) */
++function formatoMoneda(valor: number | null | undefined): string {
++  if (valor === null || valor === undefined) return "—";
++  return "$" + valor.toLocaleString("es-CL", { maximumFractionDigits: 0 });
++}
++
++/** Formato numérico chileno: 12345 → "12.345". */
++function formatoNumero(valor: number | null | undefined, decimales = 0): string {
++  if (valor === null || valor === undefined) return "—";
++  return valor.toLocaleString("es-CL", { maximumFractionDigits: decimales, minimumFractionDigits: 0 });
++}
++
++/** Monto abreviado para la cifra grande: 1.250.000.000 → "$1.250 M". */
++function formatoMontoCorto(valor: number): string {
++  if (Math.abs(valor) >= 1_000_000) return "$" + formatoNumero(valor / 1_000_000, 1) + " M";
++  return formatoMoneda(valor);
++}
++
++/**
++ * Fecha SQLite UTC ("2026-09-03 20:01:44") → texto local "03-09-2026 17:01".
++ * @param texto Fecha guardada por CURRENT_TIMESTAMP.
++ */
++function formatoFecha(texto: string | null): string {
++  if (!texto) return "—";
++  const d = new Date(texto.replace(" ", "T") + (texto.includes("Z") ? "" : "Z"));
++  if (Number.isNaN(d.getTime())) return texto;
++  return d.toLocaleString("es-CL", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
++}
++
++/**
++ * Muestra un aviso temporal abajo a la derecha.
++ * @param mensaje Texto a mostrar.
++ * @param tipo "info" | "ok" | "error".
++ */
++function aviso(mensaje: string, tipo: "info" | "ok" | "error" = "info"): void {
++  const el = document.createElement("div");
++  el.className = `aviso ${tipo}`;
++  el.textContent = mensaje;
++  $("avisos").appendChild(el);
++  setTimeout(() => el.remove(), tipo === "error" ? 7000 : 4000);
++}
++
++/** Fila de "sin datos" para una tabla. */
++function filaVacia(columnas: number, texto: string): string {
++  return `<tr><td class="vacio-tabla" colspan="${columnas}">${esc(texto)}</td></tr>`;
++}
++
++/** Vista visible actualmente. */
++let vistaActual = "panel";
++
++/**
++ * Cambia de vista y carga sus datos.
++ * @param vista Valor de `data-vista` de la sección destino.
++ */
++function irA(vista: string): void {
++  vistaActual = vista;
++  document.querySelectorAll<HTMLElement>(".vista").forEach((v) => v.classList.toggle("activa", v.dataset.vista === vista));
++  document.querySelectorAll<HTMLElement>(".menu-item").forEach((b) => b.classList.toggle("activo", b.dataset.ir === vista));
++  $("panel-datos").closest(".contenido")?.scrollTo({ top: 0 });
++
++  const cargas: Record<string, () => unknown> = {
++    panel: cargarResumen,
++    clientes: cargarClientes,
++    telefono: () => { cargarMovil(); cargarLlamadas(); },
++    historial: cargarHistorial,
++    servidor: cargarServidor,
++  };
++  cargas[vista]?.();
++}
++
++// =====================================================================
++// Panel
++// =====================================================================
++
++/** Escala de la franja (de mora reciente a antigua). Mismos tonos que --mora-1..5 en styles.css. */
++const ESCALA_MORA = ["#fbd9bc", "#f6a766", "#e8630a", "#b5470a", "#7a2e0b"];
++
++/**
++ * Color interpolado sobre ESCALA_MORA, para que cada tramo tenga un tono
++ * propio aunque haya más de 5 tramos.
++ * @param t Posición entre 0 (mora más reciente) y 1 (más antigua).
++ */
++function colorMora(t: number): string {
++  const pos = Math.min(Math.max(t, 0), 1) * (ESCALA_MORA.length - 1);
++  const i = Math.min(Math.floor(pos), ESCALA_MORA.length - 2);
++  const f = pos - i;
++  const a = ESCALA_MORA[i].match(/\w\w/g)!.map((h) => parseInt(h, 16));
++  const b = ESCALA_MORA[i + 1].match(/\w\w/g)!.map((h) => parseInt(h, 16));
++  return "#" + a.map((v, k) => Math.round(v + (b[k] - v) * f).toString(16).padStart(2, "0")).join("");
++}
++
++/**
++ * Ordena tramos de mora por el primer número que contienen
++ * ("1-30" < "31-60" < "+360"); "(sin tramo)" queda al final.
++ */
++function ordenarTramos(tramos: Phoenix.TramoConteo[]): Phoenix.TramoConteo[] {
++  const clave = (t: string) => {
++    if (t === "(sin tramo)") return Number.MAX_SAFE_INTEGER;
++    const m = t.match(/\d+/);
++    return m ? Number(m[0]) : Number.MAX_SAFE_INTEGER - 1;
++  };
++  return [...tramos].sort((a, b) => clave(a.tramo_mora) - clave(b.tramo_mora));
++}
++
++/**
++ * Dibuja la franja de antigüedad de deuda y su leyenda.
++ * @param tramos Deuda y clientes por tramo.
++ */
++function pintarFranjaTramos(tramos: Phoenix.TramoConteo[]): void {
++  const ordenados = ordenarTramos(tramos);
++  const conTramo = ordenados.filter((t) => t.tramo_mora !== "(sin tramo)");
++  const usarDeuda = ordenados.some((t) => t.deuda > 0);
++  const medida = (t: Phoenix.TramoConteo) => (usarDeuda ? t.deuda : t.total);
++  const total = ordenados.reduce((s, t) => s + medida(t), 0) || 1;
++
++  const color = (t: Phoenix.TramoConteo) => {
++    if (t.tramo_mora === "(sin tramo)") return "#c9cfd4";
++    const i = conTramo.indexOf(t);
++    return colorMora(conTramo.length <= 1 ? 0.5 : i / (conTramo.length - 1));
++  };
++
++  $("franja-tramos").innerHTML = ordenados
++    .map(
++      (t) =>
++        `<div class="franja-segmento" style="flex-grow:${medida(t) / total};background:${color(t)}"
++              title="${esc(t.tramo_mora)}: ${formatoMoneda(t.deuda)} en ${t.total} clientes"></div>`
++    )
++    .join("");
++
++  $("leyenda-tramos").innerHTML = ordenados
++    .map(
++      (t) =>
++        `<li><i style="background:${color(t)}"></i>${esc(t.tramo_mora)}
++           <b>${Math.round((medida(t) / total) * 100)}%</b></li>`
++    )
++    .join("");
++}
++
++/**
++ * Carga KPIs, franja de mora, top de deuda y distribución por gestión.
++ * (Nombre conservado de la v0.1.0.)
++ */
+ async function cargarResumen(): Promise<void> {
+-  const resumen = await phoenixAPI.obtenerResumen();
++  let resumen: Phoenix.ResumenCartera;
++  try {
++    resumen = await Api.resumen();
++  } catch (e) {
++    aviso(`No se pudo cargar el panel: ${(e as Error).message}`, "error");
++    return;
++  }
++
++  const hayDatos = resumen.totalClientes > 0;
++  $("panel-vacio").hidden = hayDatos;
++  $("panel-datos").hidden = !hayDatos;
++  if (!hayDatos) return;
+ 
+-  totalClientesEl.textContent = `Total de clientes: ${resumen.totalClientes}`;
++  const k = resumen.indicadores;
++  $("kpi-deuda").textContent = formatoMontoCorto(k?.deudaTotal ?? 0);
++  $("kpi-deuda").title = formatoMoneda(k?.deudaTotal ?? 0);
++  $("kpi-clientes").textContent = formatoNumero(resumen.totalClientes);
++  $("kpi-mora").textContent = k?.moraPromedio != null ? `${formatoNumero(k.moraPromedio)} días` : "—";
++  $("kpi-recuperacion").textContent = k?.recuperacionPromedio != null ? `${formatoNumero(k.recuperacionPromedio, 1)}%` : "—";
++  $("kpi-telefono").textContent = formatoNumero(k?.clientesConTelefono ?? 0);
++  $("kpi-llamadas").textContent = formatoNumero(k?.llamadasHoy ?? 0);
++  $("panel-bajada").textContent = `${formatoNumero(resumen.totalClientes)} clientes de ${formatoNumero(k?.totalImportaciones ?? 0)} archivos importados.`;
+ 
+-  tablaTopBody.innerHTML = resumen.topDeuda
++  pintarFranjaTramos(resumen.tramos ?? []);
++
++  document.querySelector("#tabla-top tbody")!.innerHTML = resumen.topDeuda
+     .map(
+       (c) => `
+         <tr>
+-          <td>${c.rut}</td>
+-          <td>${c.nombre_cliente ?? "(sin nombre)"}</td>
+-          <td>${formatoMoneda(c.monto_deuda)}</td>
+-          <td>${c.dias_mora ?? "—"}</td>
+-          <td>${c.categoria_gestion ?? "—"}</td>
++          <td class="sin-corte">${esc(c.rut)}</td>
++          <td>${esc(c.nombre_cliente ?? "(sin nombre)")}</td>
++          <td class="num sin-corte">${formatoMoneda(c.monto_deuda)}</td>
++          <td class="num">${c.dias_mora ?? "—"}</td>
++          <td>${etiquetaGestion(c.categoria_gestion)}</td>
+         </tr>`
+     )
+     .join("");
+ 
+-  tablaCategoriasBody.innerHTML = resumen.categorias
++  const maximo = Math.max(1, ...resumen.categorias.map((c) => c.total));
++  $("barras-categorias").innerHTML = resumen.categorias
+     .map(
+       (c) => `
+-        <tr>
+-          <td>${c.categoria_gestion}</td>
+-          <td>${c.total}</td>
+-        </tr>`
++        <li>
++          <span>${esc(c.categoria_gestion ?? "(sin categoría)")}</span>
++          <span class="valor">${formatoNumero(c.total)}</span>
++          <span class="pista"><span class="relleno" style="width:${(c.total / maximo) * 100}%"></span></span>
++        </li>`
+     )
+     .join("");
+ }
+ 
+-async function cargarHistorial(): Promise<void> {
+-  const historial = await phoenixAPI.obtenerHistorial();
++/** Etiqueta de color según la categoría de gestión. */
++function etiquetaGestion(categoria: string | null): string {
++  const clase =
++    categoria === "pago realizado" ? "ok" : categoria === "sin contacto" ? "error" : categoria === "en negociacion" ? "naranja" : "";
++  return `<span class="etiqueta ${clase}">${esc(categoria ?? "—")}</span>`;
++}
++
++// =====================================================================
++// Importar (cargador CSV / XLSX)
++// =====================================================================
++
++/** Archivo elegido y su vista previa, mientras el usuario decide importar. */
++let archivoElegido: ArchivoSeleccionado | null = null;
++let previaActual: Phoenix.PreviaArchivo | null = null;
++
++/** Nombre legible del separador detectado. */
++function nombreSeparador(sep?: string): string {
++  return ({ ";": "punto y coma", ",": "coma", "\t": "tabulador", "|": "barra vertical" } as Record<string, string>)[sep ?? ""] ?? sep ?? "";
++}
++
++/**
++ * Procesa el archivo elegido (botón o arrastrar): pide la vista previa.
++ * @param archivo Archivo elegido.
++ */
++async function seleccionarArchivo(archivo: ArchivoSeleccionado): Promise<void> {
++  archivoElegido = archivo;
++  $("resultado-importacion").hidden = true;
++  $("previa").hidden = false;
++  $("zona-carga").classList.add("compacta");
++  $("previa-nombre").textContent = archivo.nombre;
++  $("previa-meta").textContent = "Leyendo archivo…";
++  $("previa-pestanas").innerHTML = "";
++  $("previa-hoja").innerHTML = "";
++  ($("btn-confirmar-importacion") as HTMLButtonElement).disabled = true;
+ 
+-  tablaHistorialBody.innerHTML = historial
++  try {
++    previaActual = await Api.previsualizar(archivo);
++    mostrarPrevia(previaActual);
++  } catch (e) {
++    $("previa-meta").textContent = "";
++    $("previa-hoja").innerHTML = `<div class="ficha-movil" data-estado="error"><p class="ficha-titulo">No se pudo leer el archivo</p><p class="bajada">${esc((e as Error).message)}</p></div>`;
++  }
++}
++
++/**
++ * Muestra el resumen del archivo y las pestañas por hoja.
++ * @param previa Resultado de `Api.previsualizar`.
++ */
++function mostrarPrevia(previa: Phoenix.PreviaArchivo): void {
++  const totalFilas = previa.hojas.reduce((s, h) => s + h.totalFilas, 0);
++  const sinRut = previa.hojas.reduce((s, h) => s + h.filasSinRut, 0);
++
++  const partes = [previa.formato.toUpperCase()];
++  if (previa.separador) partes.push(`separado por ${nombreSeparador(previa.separador)}`);
++  if (previa.codificacion) partes.push(`codificación ${previa.codificacion}`);
++  partes.push(`${formatoNumero(totalFilas)} filas en ${previa.hojas.length} ${previa.hojas.length === 1 ? "tabla" : "hojas"}`);
++  $("previa-meta").textContent = partes.join(", ");
++
++  const boton = $("btn-confirmar-importacion") as HTMLButtonElement;
++  const aCargar = totalFilas - sinRut;
++  boton.disabled = aCargar <= 0;
++  boton.textContent = aCargar > 0 ? `Importar ${formatoNumero(aCargar)} clientes` : "No hay filas con RUT";
++
++  $("previa-pestanas").innerHTML = previa.hojas
+     .map(
+-      (h) => `
+-        <tr>
+-          <td>${h.fecha}</td>
+-          <td>${h.archivo_nombre}</td>
+-          <td>${h.hoja_nombre}</td>
+-          <td>${h.registros_cargados}</td>
+-          <td>${h.registros_corregidos}</td>
+-          <td>${h.registros_con_error}</td>
+-        </tr>`
++      (h, i) =>
++        `<button class="pestana ${i === 0 ? "activa" : ""}" role="tab" data-indice="${i}">${esc(h.hoja)}<small>${formatoNumero(h.totalFilas)}</small></button>`
++    )
++    .join("");
++
++  if (previa.hojas.length === 0) {
++    $("previa-hoja").innerHTML = `<p class="bajada">El archivo no contiene filas con datos.</p>`;
++    return;
++  }
++  pintarHojaPrevia(previa.hojas[0]);
++}
++
++/**
++ * Pinta columnas reconocidas y filas de muestra de una hoja.
++ * @param hoja Hoja a mostrar.
++ */
++function pintarHojaPrevia(hoja: Phoenix.PreviaHoja): void {
++  const reconocidas = hoja.columnas.filter((c) => c.campo).length;
++  const tieneRut = hoja.columnas.some((c) => c.campo === "rut");
++
++  const avisoRut = tieneRut
++    ? hoja.filasSinRut > 0
++      ? `<span><b>${formatoNumero(hoja.filasSinRut)}</b> filas sin RUT se omitirán</span>`
++      : ""
++    : `<span class="etiqueta error">No se encontró una columna de RUT: esta hoja no cargará clientes</span>`;
++
++  const columnas = hoja.columnas
++    .map((c) =>
++      c.campo
++        ? `<span class="columna reconocida">${esc(c.original)}<span class="campo-destino">${esc(c.campo)}</span></span>`
++        : `<span class="columna ignorada">${esc(c.original)}</span>`
+     )
+     .join("");
++
++  const encabezados = hoja.columnas.map((c) => `<th>${esc(c.original)}</th>`).join("");
++  const filas = hoja.muestra
++    .map((f) => `<tr>${hoja.columnas.map((c) => `<td>${esc(f[c.original])}</td>`).join("")}</tr>`)
++    .join("");
++
++  $("previa-hoja").innerHTML = `
++    <div class="resumen-hoja">
++      <span><b>${formatoNumero(hoja.totalFilas)}</b> filas</span>
++      <span><b>${reconocidas}</b> de ${hoja.columnas.length} columnas reconocidas</span>
++      ${avisoRut}
++    </div>
++    <p class="leyenda-columnas">En verde, las columnas que se cargan y el campo que alimentan. En gris, las que se ignoran (se pueden agregar en <code>mapeoColumnas.ts</code>).</p>
++    <div class="columnas">${columnas}</div>
++    <div class="tabla-envoltura"><table class="tabla-muestra"><thead><tr>${encabezados}</tr></thead><tbody>${filas}</tbody></table></div>`;
+ }
+ 
+-btnImportar.addEventListener("click", async () => {
+-  const ruta = await phoenixAPI.elegirArchivoExcel();
+-  if (!ruta) return;
++/** Importa el archivo de la vista previa y muestra el resultado. */
++async function confirmarImportacion(): Promise<void> {
++  if (!archivoElegido) return;
++  const boton = $("btn-confirmar-importacion") as HTMLButtonElement;
++  boton.disabled = true;
++  boton.textContent = "Importando…";
+ 
+-  btnImportar.disabled = true;
+-  estadoImportacion.textContent = "Importando...";
++  try {
++    const r = await Api.importar(archivoElegido);
++    const cargados = r.hojas.reduce((s, h) => s + h.cargados, 0);
++    const errores = r.hojas.reduce((s, h) => s + h.conError, 0);
+ 
+-  const respuesta = await phoenixAPI.importarExcel(ruta);
++    $("previa").hidden = true;
++    $("zona-carga").classList.remove("compacta");
++    const res = $("resultado-importacion");
++    res.hidden = false;
++    res.innerHTML = `
++      <section class="bloque">
++        <h2>${esc(r.archivo)} importado</h2>
++        <p class="bajada">${formatoNumero(cargados)} clientes cargados${errores ? `, ${formatoNumero(errores)} filas con error u omitidas` : ""}.</p>
++        <div class="tabla-envoltura">
++          <table>
++            <thead><tr><th>Hoja</th><th class="num">Cargados</th><th class="num">Corregidos</th><th class="num">Con error</th></tr></thead>
++            <tbody>${r.hojas
++              .map((h) => `<tr><td>${esc(h.hoja)}</td><td class="num">${formatoNumero(h.cargados)}</td><td class="num">${formatoNumero(h.corregidos)}</td><td class="num">${formatoNumero(h.conError)}</td></tr>`)
++              .join("")}</tbody>
++          </table>
++        </div>
++        <p class="acciones-cabecera separado">
++          <button class="btn primario" data-ir="panel">Ver panel</button>
++          <button class="btn secundario" data-ir="clientes">Ver clientes</button>
++        </p>
++      </section>`;
++    aviso(`Importados ${formatoNumero(cargados)} clientes`, "ok");
++    cargarCategorias();
++    archivoElegido = null;
++    previaActual = null;
++  } catch (e) {
++    aviso(`No se pudo importar: ${(e as Error).message}`, "error");
++    boton.disabled = false;
++    boton.textContent = "Reintentar importación";
++  }
++}
++
++/** Configura la zona de carga: clic, teclado y arrastrar y soltar. */
++function prepararZonaCarga(): void {
++  const zona = $("zona-carga");
++  const elegir = async () => {
++    const a = await Api.elegirArchivo();
++    if (a) seleccionarArchivo(a);
++  };
++  zona.addEventListener("click", elegir);
++  zona.addEventListener("keydown", (e) => {
++    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); elegir(); }
++  });
++
++  // Arrastrar y soltar en cualquier parte de la ventana lleva a "Importar".
++  window.addEventListener("dragover", (e) => { e.preventDefault(); zona.classList.add("encima"); });
++  window.addEventListener("dragleave", (e) => { if (!e.relatedTarget) zona.classList.remove("encima"); });
++  window.addEventListener("drop", (e) => {
++    e.preventDefault();
++    zona.classList.remove("encima");
++    const f = e.dataTransfer?.files?.[0];
++    if (!f) return;
++    if (vistaActual !== "importar") irA("importar");
++    seleccionarArchivo(Api.desdeArchivoSoltado(f));
++  });
++
++  $("btn-confirmar-importacion").addEventListener("click", confirmarImportacion);
++  $("btn-cancelar-previa").addEventListener("click", () => {
++    archivoElegido = null;
++    $("previa").hidden = true;
++    $("zona-carga").classList.remove("compacta");
++    elegir();
++  });
++  $("previa-pestanas").addEventListener("click", (e) => {
++    const b = (e.target as HTMLElement).closest<HTMLButtonElement>(".pestana");
++    if (!b || !previaActual) return;
++    document.querySelectorAll(".pestana").forEach((p) => p.classList.toggle("activa", p === b));
++    pintarHojaPrevia(previaActual.hojas[Number(b.dataset.indice)]);
++  });
++}
++
++// =====================================================================
++// Clientes
++// =====================================================================
++
++const filtroClientes: Phoenix.FiltroClientes = { texto: "", categoria: "", pagina: 1, porPagina: 50 };
++let totalPaginas = 1;
++
++/** Carga la página actual de clientes según el filtro. */
++async function cargarClientes(): Promise<void> {
++  const cuerpo = document.querySelector("#tabla-clientes tbody")!;
++  try {
++    const r = await Api.clientes(filtroClientes);
++    totalPaginas = Math.max(1, Math.ceil(r.total / r.porPagina));
++    $("pag-info").textContent = `Página ${r.pagina} de ${totalPaginas}, ${formatoNumero(r.total)} clientes`;
++    ($("pag-anterior") as HTMLButtonElement).disabled = r.pagina <= 1;
++    ($("pag-siguiente") as HTMLButtonElement).disabled = r.pagina >= totalPaginas;
++
++    cuerpo.innerHTML = r.filas.length
++      ? r.filas
++          .map(
++            (c) => `
++        <tr>
++          <td class="sin-corte">${esc(c.rut)}${c.dv ? "-" + esc(c.dv) : ""}</td>
++          <td>${esc(c.nombre_cliente ?? "(sin nombre)")}<br><small class="bajada">${esc(c.comuna ?? "")}</small></td>
++          <td class="num">${formatoMoneda(c.monto_deuda)}</td>
++          <td class="num">${c.dias_mora ?? "—"}</td>
++          <td class="sin-corte">${esc(c.tramo_mora ?? "—")}</td>
++          <td>${etiquetaGestion(c.categoria_gestion)}</td>
++          <td>${
++            c.telefonos.length
++              ? c.telefonos.map((t) => `<button class="fono" data-numero="${esc(t)}" data-cliente="${c.id}" title="Llamar desde Phoenix Mobile">${esc(t)}</button>`).join("")
++              : `<span class="bajada">Sin teléfono</span>`
++          }</td>
++        </tr>`
++          )
++          .join("")
++      : filaVacia(7, filtroClientes.texto ? "Ningún cliente coincide con la búsqueda." : "No hay clientes cargados. Importa un archivo de cartera.");
++  } catch (e) {
++    cuerpo.innerHTML = filaVacia(7, `Error: ${(e as Error).message}`);
++  }
++}
+ 
+-  if (!respuesta.ok) {
+-    estadoImportacion.textContent = `Error: ${respuesta.error}`;
++/** Llena el selector de categorías de gestión. */
++async function cargarCategorias(): Promise<void> {
++  try {
++    const cats = await Api.categorias();
++    const sel = $("filtro-categoria") as HTMLSelectElement;
++    const actual = sel.value;
++    sel.innerHTML = `<option value="">Todas las gestiones</option>` + cats.map((c) => `<option>${esc(c)}</option>`).join("");
++    sel.value = actual;
++  } catch { /* el filtro es opcional */ }
++}
++
++/**
++ * Llama a un número de un cliente a través de Phoenix Mobile.
++ * @param numero Número tal como está guardado.
++ * @param clienteId Cliente al que se asocia la gestión.
++ * @param boton Botón pulsado (se deshabilita mientras se envía).
++ */
++async function llamarCliente(numero: string, clienteId: number | null, boton?: HTMLButtonElement): Promise<void> {
++  if (boton) boton.disabled = true;
++  try {
++    const r = await Api.llamar(numero, clienteId);
++    aviso(`Llamando a ${r.numero} desde el teléfono`, "ok");
++  } catch (e) {
++    aviso((e as Error).message, "error");
++  } finally {
++    if (boton) boton.disabled = false;
++  }
++}
++
++/** Eventos de la vista Clientes (búsqueda con espera, filtros, paginación, llamadas). */
++function prepararClientes(): void {
++  let espera: number | undefined;
++  $("buscar-cliente").addEventListener("input", (e) => {
++    clearTimeout(espera);
++    espera = window.setTimeout(() => {
++      filtroClientes.texto = (e.target as HTMLInputElement).value;
++      filtroClientes.pagina = 1;
++      cargarClientes();
++    }, 250);
++  });
++  $("filtro-categoria").addEventListener("change", (e) => {
++    filtroClientes.categoria = (e.target as HTMLSelectElement).value;
++    filtroClientes.pagina = 1;
++    cargarClientes();
++  });
++  $("pag-anterior").addEventListener("click", () => { filtroClientes.pagina = Math.max(1, (filtroClientes.pagina ?? 1) - 1); cargarClientes(); });
++  $("pag-siguiente").addEventListener("click", () => { filtroClientes.pagina = Math.min(totalPaginas, (filtroClientes.pagina ?? 1) + 1); cargarClientes(); });
++  $("tabla-clientes").addEventListener("click", (e) => {
++    const b = (e.target as HTMLElement).closest<HTMLButtonElement>(".fono");
++    if (b) llamarCliente(b.dataset.numero!, Number(b.dataset.cliente), b);
++  });
++}
++
++// =====================================================================
++// Teléfono (Phoenix Mobile)
++// =====================================================================
++
++/**
++ * Actualiza la ficha de estado y el indicador de la barra lateral.
++ * @param estado Resultado del ping o `null` si no hay IP configurada.
++ */
++function pintarEstadoMovil(estado: Phoenix.EstadoMovil | null): void {
++  const ficha = $("ficha-movil");
++  const lateral = $("estado-telefono");
++  const textoLateral = lateral.querySelector(".estado-texto")!;
++
++  if (!estado) {
++    ficha.dataset.estado = "desconocido";
++    $("movil-titulo").textContent = "Sin configurar";
++    $("movil-detalle").textContent = "Escribe la IP y prueba la conexión.";
++    lateral.dataset.estado = "";
++    textoLateral.textContent = "Teléfono sin configurar";
++    return;
++  }
++
++  if (estado.conectado) {
++    ficha.dataset.estado = estado.permisoLlamadas ? "ok" : "error";
++    $("movil-titulo").textContent = `Conectado a ${estado.dispositivo}`;
++    $("movil-detalle").textContent = estado.permisoLlamadas
++      ? `${estado.ip}:${estado.puerto}. Permiso de llamadas concedido.`
++      : "Falta conceder el permiso de llamadas en Phoenix Mobile.";
++    lateral.dataset.estado = estado.permisoLlamadas ? "ok" : "error";
++    textoLateral.textContent = estado.dispositivo ?? "Teléfono conectado";
+   } else {
+-    const resumenTexto = respuesta
+-      .resultado!.hojas.map(
+-        (h) => `${h.hoja}: ${h.cargados} cargados, ${h.corregidos} corregidos, ${h.conError} con error`
+-      )
+-      .join(" · ");
+-    estadoImportacion.textContent = `Importación completa — ${resumenTexto}`;
++    ficha.dataset.estado = "error";
++    $("movil-titulo").textContent = "No conectado";
++    $("movil-detalle").textContent = estado.detalle ?? "";
++    lateral.dataset.estado = "error";
++    textoLateral.textContent = "Teléfono no responde";
+   }
++}
+ 
+-  btnImportar.disabled = false;
+-  await cargarResumen();
+-  await cargarHistorial();
+-});
++/** Carga la IP guardada y prueba la conexión en segundo plano. */
++async function cargarMovil(): Promise<void> {
++  try {
++    const { ip } = await Api.movil();
++    const input = $("movil-ip") as HTMLInputElement;
++    if (ip && !input.value) input.value = ip;
++    if (!ip) return pintarEstadoMovil(null);
++    pintarEstadoMovil(await Api.probarMovil());
++  } catch (e) {
++    aviso((e as Error).message, "error");
++  }
++}
+ 
+-btnActualizar.addEventListener("click", async () => {
+-  await cargarResumen();
+-  await cargarHistorial();
+-});
++/** Prueba la IP escrita (y la guarda si responde). */
++async function probarConexionMovil(): Promise<void> {
++  const ip = ($("movil-ip") as HTMLInputElement).value.trim();
++  if (!ip) return aviso("Escribe la IP que muestra Phoenix Mobile.", "error");
++  $("ficha-movil").dataset.estado = "cargando";
++  $("movil-titulo").textContent = "Probando conexión…";
++  $("movil-detalle").textContent = "";
++  try {
++    const estado = await Api.probarMovil(ip);
++    pintarEstadoMovil(estado);
++    if (estado.conectado) aviso("Teléfono conectado. La IP quedó guardada.", "ok");
++  } catch (e) {
++    aviso((e as Error).message, "error");
++  }
++}
++
++/** Carga la tabla de últimas llamadas. */
++async function cargarLlamadas(): Promise<void> {
++  const cuerpo = document.querySelector("#tabla-llamadas tbody")!;
++  try {
++    const filas = await Api.llamadas();
++    cuerpo.innerHTML = filas.length
++      ? filas
++          .map(
++            (l) => `<tr>
++              <td class="sin-corte">${formatoFecha(l.fecha)}</td>
++              <td>${esc(l.nombre_cliente ?? l.rut ?? "Manual")}</td>
++              <td>${esc(l.texto_libre)}</td>
++              <td><span class="etiqueta ${l.resultado === "enviada" ? "ok" : "error"}">${esc(l.resultado)}</span></td>
++            </tr>`
++          )
++          .join("")
++      : filaVacia(4, "Todavía no hay llamadas registradas.");
++  } catch (e) {
++    cuerpo.innerHTML = filaVacia(4, `Error: ${(e as Error).message}`);
++  }
++}
++
++/** Eventos de la vista Teléfono. */
++function prepararTelefono(): void {
++  $("btn-probar-movil").addEventListener("click", probarConexionMovil);
++  $("movil-ip").addEventListener("keydown", (e) => { if ((e as KeyboardEvent).key === "Enter") probarConexionMovil(); });
++  $("btn-llamar-manual").addEventListener("click", async () => {
++    const numero = ($("movil-numero") as HTMLInputElement).value.trim();
++    if (!numero) return aviso("Escribe un número.", "error");
++    await llamarCliente(numero, null, $("btn-llamar-manual") as HTMLButtonElement);
++    cargarLlamadas();
++  });
++}
++
++// =====================================================================
++// Historial
++// =====================================================================
++
++/** Carga el historial de importaciones. (Nombre conservado de la v0.1.0.) */
++async function cargarHistorial(): Promise<void> {
++  const cuerpo = document.querySelector("#tabla-historial tbody")!;
++  try {
++    const historial = await Api.historial();
++    cuerpo.innerHTML = historial.length
++      ? historial
++          .map(
++            (h) => `
++        <tr>
++          <td class="sin-corte">${formatoFecha(h.fecha)}</td>
++          <td>${esc(h.archivo_nombre)}</td>
++          <td>${esc(h.hoja_nombre)}</td>
++          <td class="num">${formatoNumero(h.registros_cargados)}</td>
++          <td class="num">${formatoNumero(h.registros_corregidos)}</td>
++          <td class="num">${formatoNumero(h.registros_con_error)}</td>
++        </tr>`
++          )
++          .join("")
++      : filaVacia(6, "Aún no se ha importado ningún archivo.");
++  } catch (e) {
++    cuerpo.innerHTML = filaVacia(6, `Error: ${(e as Error).message}`);
++  }
++}
++
++// =====================================================================
++// Servidor
++// =====================================================================
++
++/**
++ * Pinta el estado del servidor en la vista y en la barra lateral.
++ * @param e Estado devuelto por el backend.
++ */
++function pintarEstadoServidor(e: Phoenix.EstadoServidor): void {
++  const ficha = $("ficha-servidor");
++  ficha.dataset.estado = e.activo ? "ok" : e.error ? "error" : "desconocido";
++  $("servidor-titulo").textContent = e.activo
++    ? `Activo en el puerto ${e.puerto}${e.accesoRed ? ", visible en la red local" : ", sólo este equipo"}`
++    : e.error
++      ? `Detenido: ${e.error}`
++      : "Detenido";
++  $("servidor-urls").innerHTML = e.urls.map((u) => `<li><a data-url="${esc(u)}">${esc(u)}</a></li>`).join("");
++
++  ($("srv-habilitado") as HTMLInputElement).checked = e.habilitado;
++  ($("srv-red") as HTMLInputElement).checked = e.accesoRed;
++  ($("srv-puerto") as HTMLInputElement).value = String(e.puerto);
++
++  const lateral = $("estado-servidor");
++  lateral.dataset.estado = e.activo ? "ok" : e.error ? "error" : "";
++  lateral.querySelector(".estado-texto")!.textContent = e.activo ? `Servidor en :${e.puerto}` : "Servidor detenido";
++}
++
++/** Consulta el estado del servidor. */
++async function cargarServidor(): Promise<void> {
++  try {
++    pintarEstadoServidor(await Api.servidor());
++  } catch (e) {
++    $("servidor-titulo").textContent = (e as Error).message;
++  }
++}
++
++/** Eventos de la vista Servidor. */
++function prepararServidor(): void {
++  const web = Api.modo === "web";
++  if (web) {
++    $("form-servidor").querySelectorAll("input, button").forEach((el) => ((el as HTMLInputElement).disabled = true));
++    $("srv-nota").textContent = "Estás conectado desde un navegador. La configuración sólo se cambia desde la app de escritorio.";
++  }
++
++  $("form-servidor").addEventListener("submit", async (ev) => {
++    ev.preventDefault();
++    try {
++      const e = await Api.configurarServidor({
++        habilitado: ($("srv-habilitado") as HTMLInputElement).checked,
++        accesoRed: ($("srv-red") as HTMLInputElement).checked,
++        puerto: Number(($("srv-puerto") as HTMLInputElement).value),
++      });
++      pintarEstadoServidor(e);
++      aviso(e.activo ? "Servidor reiniciado" : e.error ?? "Servidor detenido", e.error ? "error" : "ok");
++    } catch (err) {
++      aviso((err as Error).message, "error");
++    }
++  });
++
++  $("servidor-urls").addEventListener("click", (ev) => {
++    const a = (ev.target as HTMLElement).closest<HTMLAnchorElement>("a[data-url]");
++    if (a) Api.abrirExterno(a.dataset.url!).catch((e) => aviso(e.message, "error"));
++  });
++}
++
++// =====================================================================
++// Inicio
++// =====================================================================
++
++/** Conecta la navegación y carga los datos iniciales. */
++function iniciar(): void {
++  // Cualquier elemento con data-ir navega (menú, botones, indicadores).
++  document.addEventListener("click", (e) => {
++    const destino = (e.target as HTMLElement).closest<HTMLElement>("[data-ir]");
++    if (destino) irA(destino.dataset.ir!);
++  });
++  $("btn-actualizar").addEventListener("click", () => { cargarResumen(); aviso("Panel actualizado"); });
++
++  $("modo-app").textContent = Api.modo === "electron" ? "App de escritorio" : `Navegador conectado a ${location.host}`;
++
++  prepararZonaCarga();
++  prepararClientes();
++  prepararTelefono();
++  prepararServidor();
++
++  cargarResumen();
++  cargarCategorias();
++  cargarServidor();
++  cargarMovil();
++
++  // Re-verifica el teléfono cada 30 s para mantener el indicador al día.
++  setInterval(() => {
++    Api.movil()
++      .then(({ ip }) => (ip ? Api.probarMovil().then(pintarEstadoMovil) : undefined))
++      .catch(() => undefined);
++  }, 30_000);
++}
+ 
+-// Carga inicial al abrir la app
+-cargarResumen();
+-cargarHistorial();
++iniciar();
+diff --git a/src/renderer/styles.css b/src/renderer/styles.css
+index 2781c73..e1ae06d 100644
+--- a/src/renderer/styles.css
++++ b/src/renderer/styles.css
+@@ -1,79 +1,455 @@
++/* =====================================================================
++   ERS Phoenix — estilos de la interfaz (v0.2.0)
++   Paleta naranja/blanco (RNF-04) heredada de la v0.1.0:
++     --naranja #e8630a y --naranja-suave #fde9d9 se conservan.
++   Tipografía del sistema (app offline):
++     Bahnschrift (DIN de Windows) para cifras; Segoe UI Variable para texto.
++   ===================================================================== */
++
+ :root {
++  /* Colores base (v0.1.0) */
+   --naranja: #e8630a;
+   --naranja-suave: #fde9d9;
+-  --texto: #2b2b2b;
+-}
++  --texto: #1e2b33;
++
++  /* Colores v0.2.0 */
++  --texto-2: #5b6770;
++  --linea: #e3e6e9;
++  --fondo: #f3f4f6;
++  --superficie: #ffffff;
++  --ok: #2e7d4f;
++  --ok-suave: #e3f2e9;
++  --error: #b83227;
++  --error-suave: #fbe7e5;
+ 
+-* {
+-  box-sizing: border-box;
++  /* Escala de antigüedad de la deuda (tramos de mora) */
++  --mora-1: #fbd9bc;
++  --mora-2: #f6a766;
++  --mora-3: #e8630a;
++  --mora-4: #b5470a;
++  --mora-5: #7a2e0b;
++
++  --fuente: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
++  --fuente-cifras: Bahnschrift, "DIN Alternate", "Arial Narrow", var(--fuente);
++
++  --radio: 6px;
+ }
+ 
++* { box-sizing: border-box; }
++
++html, body { height: 100%; }
++
+ body {
+-  font-family: Arial, sans-serif;
+   margin: 0;
++  font-family: var(--fuente);
++  font-size: 14px;
++  line-height: 1.5;
+   color: var(--texto);
+-  background: #ffffff;
++  background: var(--fondo);
+ }
+ 
+-header {
+-  background: var(--naranja);
+-  color: white;
+-  padding: 16px 24px;
++h1, h2, h3 { margin: 0; font-weight: 600; }
++h1 { font-size: 24px; letter-spacing: -0.01em; }
++h2 { font-size: 15px; }
++
++code {
++  font-family: Consolas, "Cascadia Mono", monospace;
++  background: var(--fondo);
++  padding: 1px 6px;
++  border-radius: 4px;
+ }
+ 
+-header h1 {
+-  margin: 0;
+-  font-size: 20px;
++button, input, select { font: inherit; color: inherit; }
++
++:focus-visible { outline: 2px solid var(--naranja); outline-offset: 2px; }
++
++[hidden] { display: none !important; }
++
++/* ============================== ESTRUCTURA ============================== */
++
++.app {
++  display: grid;
++  grid-template-columns: 232px 1fr;
++  height: 100vh;
+ }
+ 
+-main {
+-  padding: 24px;
++.lateral {
++  display: flex;
++  flex-direction: column;
++  background: var(--superficie);
++  border-right: 1px solid var(--linea);
++  padding: 20px 12px;
++  overflow-y: auto;
+ }
+ 
+-.acciones {
++.marca {
+   display: flex;
+   align-items: center;
+-  gap: 12px;
+-  margin-bottom: 24px;
++  gap: 10px;
++  padding: 0 8px 22px;
++}
++.marca strong { display: block; font-size: 16px; }
++.marca-sub { color: var(--texto-2); font-size: 12px; }
++
++/* Símbolo: llama estilizada con dos capas de la escala de mora */
++.marca-simbolo {
++  width: 30px; height: 30px;
++  border-radius: 50% 50% 50% 4px;
++  transform: rotate(-45deg);
++  background: linear-gradient(135deg, var(--mora-2), var(--mora-4));
++  box-shadow: inset -6px 6px 0 var(--naranja);
+ }
+ 
+-button {
++.menu { display: flex; flex-direction: column; gap: 2px; }
++
++.menu-item {
++  text-align: left;
++  border: 0;
++  background: none;
++  padding: 9px 12px 9px 14px;
++  border-radius: var(--radio);
++  color: var(--texto-2);
++  cursor: pointer;
++  position: relative;
++}
++.menu-item:hover { background: var(--fondo); color: var(--texto); }
++.menu-item.activo { color: var(--texto); font-weight: 600; background: var(--naranja-suave); }
++.menu-item.activo::before {
++  content: "";
++  position: absolute; left: 0; top: 8px; bottom: 8px;
++  width: 3px; border-radius: 2px;
+   background: var(--naranja);
+-  color: white;
+-  border: none;
+-  padding: 10px 16px;
+-  border-radius: 6px;
+-  font-size: 14px;
++}
++
++.estados { margin-top: auto; display: flex; flex-direction: column; gap: 4px; padding-top: 16px; border-top: 1px solid var(--linea); }
++
++.estado {
++  display: flex; align-items: center; gap: 8px;
++  border: 0; background: none; padding: 6px 8px;
++  border-radius: var(--radio);
++  font-size: 12px; color: var(--texto-2);
++  cursor: pointer; text-align: left;
++}
++.estado:hover { background: var(--fondo); }
++.punto { width: 8px; height: 8px; border-radius: 50%; background: #b8c0c6; flex: none; }
++.estado[data-estado="ok"] .punto { background: var(--ok); }
++.estado[data-estado="error"] .punto { background: var(--error); }
++
++.modo { margin: 6px 8px 0; font-size: 11px; color: #8a959c; }
++
++.contenido { overflow-y: auto; padding: 28px 36px 48px; }
++
++.vista { display: none; max-width: 1240px; }
++.vista.activa { display: block; }
++
++.cabecera {
++  display: flex; justify-content: space-between; align-items: flex-end; gap: 16px;
++  margin-bottom: 24px;
++}
++.bajada { margin: 4px 0 0; color: var(--texto-2); max-width: 72ch; }
++.acciones-cabecera { display: flex; gap: 8px; flex-wrap: wrap; }
++
++/* ================================ BOTONES ================================ */
++
++.btn {
++  border: 1px solid transparent;
++  padding: 8px 16px;
++  border-radius: var(--radio);
+   cursor: pointer;
++  font-weight: 600;
++  white-space: nowrap;
+ }
++.btn.primario { background: var(--naranja); color: #fff; }
++.btn.primario:hover { background: #d4580a; }
++.btn.secundario { background: var(--superficie); border-color: var(--linea); }
++.btn.secundario:hover { border-color: #c5ccd1; }
++.btn:disabled { opacity: .55; cursor: not-allowed; }
+ 
+-button:hover {
+-  opacity: 0.9;
++/* ================================ PANEL ================================ */
++
++.franja-mora {
++  background: var(--superficie);
++  border: 1px solid var(--linea);
++  border-radius: var(--radio);
++  padding: 20px 22px 18px;
++  margin-bottom: 16px;
+ }
++.franja-titulo { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+ 
+-button:disabled {
+-  background: #ccc;
+-  cursor: not-allowed;
++.cifra, .cifra-grande, td.num, .barras .valor {
++  font-family: var(--fuente-cifras);
++  font-variant-numeric: tabular-nums;
+ }
++.cifra-grande { font-size: 34px; line-height: 1; letter-spacing: -0.01em; white-space: nowrap; }
+ 
+-table {
+-  width: 100%;
+-  border-collapse: collapse;
+-  margin-bottom: 24px;
++/* El elemento distintivo: franja de antigüedad de la deuda */
++.franja {
++  display: flex;
++  height: 44px;
++  border-radius: 4px;
++  overflow: hidden;
++  background: var(--fondo);
+ }
++.franja-segmento {
++  min-width: 3px;
++  transition: flex-grow .5s ease;
++  position: relative;
++}
++.franja-segmento:hover { filter: brightness(1.06); }
+ 
+-th, td {
+-  text-align: left;
+-  padding: 8px 10px;
+-  border-bottom: 1px solid #eee;
+-  font-size: 14px;
++.franja-leyenda {
++  list-style: none; margin: 12px 0 0; padding: 0;
++  display: flex; flex-wrap: wrap; gap: 6px 20px;
++  font-size: 12px; color: var(--texto-2);
++}
++.franja-leyenda li { display: flex; align-items: center; gap: 6px; }
++.franja-leyenda i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
++.franja-leyenda b { color: var(--texto); font-weight: 600; }
++
++.indicadores {
++  display: grid;
++  grid-template-columns: repeat(5, 1fr);
++  margin: 0 0 16px;
++  background: var(--superficie);
++  border: 1px solid var(--linea);
++  border-radius: var(--radio);
++}
++.indicadores > div { padding: 14px 18px; border-left: 1px solid var(--linea); }
++.indicadores > div:first-child { border-left: 0; }
++.indicadores dt { font-size: 12px; color: var(--texto-2); }
++.indicadores dd { margin: 2px 0 0; font-size: 22px; }
++
++.rejilla-dos { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; align-items: start; }
++.rejilla-dos.mitades { grid-template-columns: 1fr 1fr; }
++/* min-width: 0 evita que una tabla ancha empuje la columna fuera de la pantalla */
++.rejilla-dos > * { min-width: 0; }
++
++.bloque {
++  background: var(--superficie);
++  border: 1px solid var(--linea);
++  border-radius: var(--radio);
++  padding: 18px 20px;
++}
++.bloque > h2 { margin-bottom: 12px; }
++.separado { margin-top: 24px; }
++
++.barras { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
++.barras li { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-size: 13px; }
++.barras .pista { grid-column: 1 / -1; height: 8px; background: var(--fondo); border-radius: 4px; overflow: hidden; }
++.barras .relleno { display: block; height: 100%; background: var(--naranja); border-radius: 4px; }
++
++.vacio {
++  background: var(--superficie);
++  border: 1px dashed #c9cfd4;
++  border-radius: var(--radio);
++  padding: 48px 32px;
++  text-align: center;
++}
++.vacio p { color: var(--texto-2); max-width: 52ch; margin: 8px auto 20px; }
++
++/* ================================ TABLAS ================================ */
++
++.tabla-envoltura {
++  overflow-x: auto;
++  background: var(--superficie);
++  border: 1px solid var(--linea);
++  border-radius: var(--radio);
+ }
++.bloque .tabla-envoltura { border: 0; border-radius: 0; margin: 0 -20px -18px; }
+ 
++table { width: 100%; border-collapse: collapse; }
++th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--linea); vertical-align: top; }
+ th {
+-  background: var(--naranja-suave);
++  font-size: 12px; font-weight: 600; color: var(--texto-2);
++  background: #fafbfb;
++  position: sticky; top: 0;
++}
++tbody tr:last-child td { border-bottom: 0; }
++tbody tr:hover td { background: #fffaf6; }
++.num { text-align: right; }
++td.vacio-tabla { color: var(--texto-2); text-align: center; padding: 28px; }
++.sin-corte { white-space: nowrap; }
++/* Tabla de muestra de la vista previa: una línea por celda, texto largo recortado */
++.tabla-muestra td, .tabla-muestra th { white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
++
++.etiqueta {
++  display: inline-block;
++  padding: 1px 8px;
++  border-radius: 10px;
++  font-size: 12px;
++  background: var(--fondo);
++  white-space: nowrap;
++}
++.etiqueta.ok { background: var(--ok-suave); color: var(--ok); }
++.etiqueta.error { background: var(--error-suave); color: var(--error); }
++.etiqueta.naranja { background: var(--naranja-suave); color: #9a4108; }
++
++.fono {
++  display: inline-flex; align-items: center; gap: 4px;
++  border: 1px solid var(--linea); background: var(--superficie);
++  border-radius: 14px; padding: 2px 10px 2px 8px; margin: 0 4px 4px 0;
++  font-family: var(--fuente-cifras); font-size: 13px;
++  cursor: pointer;
++}
++.fono::before {
++  content: ""; width: 8px; height: 8px; border-radius: 50%;
++  background: var(--naranja);
++}
++.fono:hover { border-color: var(--naranja); background: var(--naranja-suave); }
++.fono:disabled { opacity: .6; }
++
++/* ================================ IMPORTAR ================================ */
++
++.zona-carga {
++  border: 2px dashed #e7b48d;
++  background: var(--superficie);
++  border-radius: 10px;
++  padding: 44px 24px;
++  text-align: center;
++  cursor: pointer;
++  transition: background .15s, border-color .15s;
++}
++.zona-carga:hover, .zona-carga.encima { background: var(--naranja-suave); border-color: var(--naranja); }
++.zona-icono {
++  width: 46px; height: 56px; margin: 0 auto 14px;
++  border: 2px solid var(--naranja); border-radius: 4px 14px 4px 4px;
++  background:
++    linear-gradient(var(--naranja), var(--naranja)) 9px 20px / 24px 2px no-repeat,
++    linear-gradient(var(--naranja), var(--naranja)) 9px 28px / 24px 2px no-repeat,
++    linear-gradient(var(--naranja), var(--naranja)) 9px 36px / 16px 2px no-repeat;
++}
++.zona-principal { font-size: 17px; font-weight: 600; margin: 0; }
++.zona-secundaria { margin: 4px 0 0; color: var(--texto-2); }
++.zona-nota { margin: 14px 0 0; font-size: 12px; color: #8a959c; }
++.enlace { color: var(--naranja); text-decoration: underline; text-underline-offset: 2px; }
++
++.zona-carga.compacta { padding: 16px; }
++.zona-carga.compacta .zona-icono, .zona-carga.compacta .zona-nota { display: none; }
++
++.previa-cabecera {
++  display: flex; justify-content: space-between; align-items: flex-end; gap: 16px;
++  margin: 24px 0 14px;
++}
++
++.pestanas { display: flex; gap: 4px; border-bottom: 1px solid var(--linea); margin-bottom: 14px; overflow-x: auto; }
++.pestana {
++  border: 0; background: none; padding: 8px 14px; cursor: pointer;
++  color: var(--texto-2); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap;
++}
++.pestana.activa { color: var(--texto); font-weight: 600; border-bottom-color: var(--naranja); }
++.pestana small { color: #8a959c; font-weight: 400; margin-left: 4px; }
++
++.resumen-hoja { display: flex; flex-wrap: wrap; gap: 8px 24px; margin-bottom: 14px; color: var(--texto-2); }
++.resumen-hoja b { color: var(--texto); font-family: var(--fuente-cifras); font-weight: 400; font-size: 16px; }
++
++.columnas { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
++.columna {
++  border: 1px solid var(--linea); border-radius: 4px; padding: 3px 8px; font-size: 12px; background: var(--superficie);
++}
++.columna.reconocida { border-color: #b9dcc7; background: var(--ok-suave); }
++.columna .campo-destino { color: var(--ok); margin-left: 4px; }
++.columna.ignorada { color: var(--texto-2); }
++
++.leyenda-columnas { font-size: 12px; color: var(--texto-2); margin: 0 0 8px; }
++
++.resultado { margin-top: 24px; }
++.resultado .bloque h2 { margin-bottom: 8px; }
++
++/* ================================ CLIENTES ================================ */
++
++.filtros { display: flex; gap: 10px; margin-bottom: 14px; }
++.filtros input, .filtros select, .campo input {
++  border: 1px solid var(--linea); border-radius: var(--radio);
++  padding: 8px 12px; background: var(--superficie);
++}
++.filtros input { flex: 1; max-width: 420px; }
++
++.paginacion { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 12px; color: var(--texto-2); }
++
++/* ================================ TELÉFONO / SERVIDOR ================================ */
++
++.campo { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
++.campo span { font-size: 12px; font-weight: 600; color: var(--texto-2); }
++.campo input { font-family: var(--fuente-cifras); font-size: 16px; }
++.campo.corto input { max-width: 140px; }
++
++.ficha-movil {
++  margin-top: 16px; padding: 12px 14px;
++  border-radius: var(--radio);
++  border-left: 3px solid #b8c0c6;
++  background: var(--fondo);
++}
++.ficha-movil[data-estado="ok"] { border-left-color: var(--ok); background: var(--ok-suave); }
++.ficha-movil[data-estado="error"] { border-left-color: var(--error); background: var(--error-suave); }
++.ficha-movil[data-estado="cargando"] { border-left-color: var(--naranja); background: var(--naranja-suave); }
++.ficha-titulo { margin: 0; font-weight: 600; }
++.ficha-movil .bajada { margin-top: 2px; }
++
++.pasos { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; color: var(--texto-2); }
++.pasos strong, .pasos em { color: var(--texto); }
++
++.urls { list-style: none; padding: 0; margin: 6px 0 0; }
++.urls a { color: var(--naranja); cursor: pointer; font-family: var(--fuente-cifras); }
++
++.config-servidor { margin-top: 18px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
++.interruptor { display: flex; align-items: center; gap: 8px; cursor: pointer; }
++.interruptor input { accent-color: var(--naranja); width: 16px; height: 16px; }
++
++.diagrama { display: flex; flex-direction: column; gap: 4px; }
++.d-fila { display: flex; gap: 10px; justify-content: center; }
++.d-caja {
++  flex: 1; text-align: center; padding: 10px 8px;
++  border-radius: var(--radio); border: 1px solid var(--linea);
++  font-weight: 600; font-size: 13px;
++}
++.d-caja small { display: block; font-weight: 400; color: var(--texto-2); font-size: 11px; }
++.d-caja.cliente { background: var(--superficie); }
++.d-caja.nucleo { background: var(--naranja); border-color: var(--naranja); color: #fff; }
++.d-caja.nucleo small { color: #ffe5d2; }
++.d-caja.dato { background: var(--fondo); }
++.d-caja.movil { background: var(--naranja-suave); border-color: #f2c6a3; }
++.d-flechas { font-size: 11px; color: var(--texto-2); }
++.d-flechas span { flex: 1; text-align: center; }
++.d-flechas span::before { content: "↕ "; color: var(--naranja); }
++
++/* ================================ AVISOS ================================ */
++
++.avisos { position: fixed; right: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 10; }
++.aviso {
++  background: var(--texto); color: #fff;
++  padding: 10px 14px; border-radius: var(--radio);
++  max-width: 380px; font-size: 13px;
++  border-left: 3px solid var(--naranja);
++  animation: entra .2s ease-out;
++}
++.aviso.error { border-left-color: #ff8a7a; }
++.aviso.ok { border-left-color: #7fd3a1; }
++@keyframes entra { from { transform: translateY(6px); opacity: 0; } }
++
++/* ================================ RESPONSIVO / ACCESIBILIDAD ================================ */
++
++@media (max-width: 1100px) {
++  .indicadores { grid-template-columns: repeat(3, 1fr); }
++  .indicadores > div:nth-child(4) { border-left: 0; }
++  .indicadores > div:nth-child(n + 4) { border-top: 1px solid var(--linea); }
++  .rejilla-dos { grid-template-columns: 1fr; }
++}
++
++@media (max-width: 760px) {
++  .app { grid-template-columns: 1fr; height: auto; }
++  .lateral { flex-direction: row; flex-wrap: wrap; padding: 10px; gap: 8px; border-right: 0; border-bottom: 1px solid var(--linea); }
++  .marca { padding: 0 8px; }
++  .menu { flex-direction: row; flex-wrap: wrap; }
++  .estados { display: none; }
++  .contenido { padding: 20px 16px; }
++  .cabecera, .previa-cabecera { flex-direction: column; align-items: flex-start; }
++  .indicadores { grid-template-columns: repeat(2, 1fr); }
++  .indicadores > div, .indicadores > div:nth-child(4) { border-left: 0; border-top: 1px solid var(--linea); }
++  .indicadores > div:nth-child(even) { border-left: 1px solid var(--linea); }
++  .indicadores > div:nth-child(-n + 2) { border-top: 0; }
++  .franja-titulo { flex-direction: column; align-items: flex-start; gap: 6px; }
+ }
+ 
+-#estado-importacion {
+-  font-size: 13px;
+-  color: #555;
++@media (prefers-reduced-motion: reduce) {
++  * { transition: none !important; animation: none !important; }
+ }

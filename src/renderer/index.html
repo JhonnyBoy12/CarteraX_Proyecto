@@ -1,27 +1,319 @@
 <!DOCTYPE html>
+<!--
+  ERS Phoenix — Interfaz (renderer)
+  v0.2.0: rediseño con navegación lateral. Funciona dentro de Electron (IPC)
+  y desde un navegador servido por el backend HTTP (ver renderer/api.ts).
+  Las vistas son <section data-vista="..."> y se muestran de a una.
+-->
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
-
-    <title>CarteraX</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:" />
+  <title>ERS Phoenix — Gestión de cartera</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
-
 <body>
+  <div class="app">
+    <!-- ============================ NAVEGACIÓN ============================ -->
+    <aside class="lateral">
+      <div class="marca">
+        <span class="marca-simbolo" aria-hidden="true"></span>
+        <div>
+          <strong>ERS Phoenix</strong>
+          <span class="marca-sub">Gestión de cartera</span>
+        </div>
+      </div>
 
-    <h1>CarteraX</h1>
+      <nav class="menu" aria-label="Secciones">
+        <button class="menu-item activo" data-ir="panel">Panel</button>
+        <button class="menu-item" data-ir="importar">Importar cartera</button>
+        <button class="menu-item" data-ir="clientes">Clientes</button>
+        <button class="menu-item" data-ir="telefono">Teléfono</button>
+        <button class="menu-item" data-ir="historial">Historial</button>
+        <button class="menu-item" data-ir="servidor">Servidor</button>
+      </nav>
 
-    <p>
-        Sistema de Gestión de Cartera
-    </p>
+      <div class="estados">
+        <button class="estado" data-ir="telefono" id="estado-telefono">
+          <span class="punto"></span><span class="estado-texto">Teléfono sin configurar</span>
+        </button>
+        <button class="estado" data-ir="servidor" id="estado-servidor">
+          <span class="punto"></span><span class="estado-texto">Servidor…</span>
+        </button>
+        <p class="modo" id="modo-app"></p>
+      </div>
+    </aside>
 
-    <p>
-        Primera versión funcionando 
-    </p>
+    <main class="contenido">
+      <!-- =============================== PANEL =============================== -->
+      <section class="vista activa" data-vista="panel">
+        <header class="cabecera">
+          <div>
+            <h1>Panel de cartera</h1>
+            <p class="bajada" id="panel-bajada">Resumen de los clientes cargados.</p>
+          </div>
+          <div class="acciones-cabecera">
+            <button class="btn secundario" id="btn-actualizar">Actualizar</button>
+            <button class="btn primario" data-ir="importar">Importar cartera</button>
+          </div>
+        </header>
 
+        <div class="vacio" id="panel-vacio" hidden>
+          <h2>Aún no hay clientes cargados</h2>
+          <p>Importa un archivo Excel o CSV de cartera para ver aquí la deuda, la mora y las gestiones.</p>
+          <button class="btn primario" data-ir="importar">Importar mi primer archivo</button>
+        </div>
+
+        <div id="panel-datos">
+          <div class="franja-mora" aria-label="Deuda por tramo de mora">
+            <div class="franja-titulo">
+              <h2>Deuda por tramo de mora</h2>
+              <span class="cifra-grande" id="kpi-deuda">$0</span>
+            </div>
+            <div class="franja" id="franja-tramos"></div>
+            <ul class="franja-leyenda" id="leyenda-tramos"></ul>
+          </div>
+
+          <dl class="indicadores">
+            <div><dt>Clientes</dt><dd class="cifra" id="kpi-clientes">0</dd></div>
+            <div><dt>Mora promedio</dt><dd class="cifra" id="kpi-mora">—</dd></div>
+            <div><dt>Recuperación promedio</dt><dd class="cifra" id="kpi-recuperacion">—</dd></div>
+            <div><dt>Con teléfono</dt><dd class="cifra" id="kpi-telefono">0</dd></div>
+            <div><dt>Llamadas hoy</dt><dd class="cifra" id="kpi-llamadas">0</dd></div>
+          </dl>
+
+          <div class="rejilla-dos">
+            <section class="bloque">
+              <h2>Mayores deudas</h2>
+              <div class="tabla-envoltura">
+                <table id="tabla-top">
+                  <thead>
+                    <tr><th>RUT</th><th>Nombre</th><th class="num">Deuda</th><th class="num">Días de mora</th><th>Gestión</th></tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </section>
+            <section class="bloque">
+              <h2>Clientes por resultado de gestión</h2>
+              <ul class="barras" id="barras-categorias"></ul>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================== IMPORTAR ============================== -->
+      <section class="vista" data-vista="importar">
+        <header class="cabecera">
+          <div>
+            <h1>Importar cartera</h1>
+            <p class="bajada">Excel (.xlsx, .xls, .xlsm, .ods) o texto delimitado (.csv, .tsv, .txt). Revisa la vista previa antes de cargar.</p>
+          </div>
+        </header>
+
+        <div class="zona-carga" id="zona-carga" tabindex="0" role="button" aria-label="Elegir archivo de cartera">
+          <div class="zona-icono" aria-hidden="true"></div>
+          <p class="zona-principal">Arrastra aquí el archivo de cartera</p>
+          <p class="zona-secundaria">o <span class="enlace">elígelo desde tu equipo</span></p>
+          <p class="zona-nota">El separador del CSV (; , tab |) y la codificación (UTF-8 o Windows) se detectan solos.</p>
+        </div>
+
+        <div id="previa" hidden>
+          <div class="previa-cabecera">
+            <div>
+              <h2 id="previa-nombre"></h2>
+              <p class="bajada" id="previa-meta"></p>
+            </div>
+            <div class="acciones-cabecera">
+              <button class="btn secundario" id="btn-cancelar-previa">Elegir otro archivo</button>
+              <button class="btn primario" id="btn-confirmar-importacion">Importar</button>
+            </div>
+          </div>
+
+          <div class="pestanas" id="previa-pestanas" role="tablist"></div>
+          <div id="previa-hoja"></div>
+        </div>
+
+        <div class="resultado" id="resultado-importacion" hidden></div>
+      </section>
+
+      <!-- ============================== CLIENTES ============================== -->
+      <section class="vista" data-vista="clientes">
+        <header class="cabecera">
+          <div>
+            <h1>Clientes</h1>
+            <p class="bajada" id="clientes-bajada">Busca por RUT o nombre y llama desde el teléfono conectado.</p>
+          </div>
+        </header>
+
+        <div class="filtros">
+          <input type="search" id="buscar-cliente" placeholder="Buscar por RUT o nombre" autocomplete="off" />
+          <select id="filtro-categoria"><option value="">Todos los estados</option></select>
+        </div>
+
+        <div class="tabla-envoltura">
+          <table id="tabla-clientes">
+            <thead>
+              <tr>
+                <th>RUT</th><th>Nombre</th><th class="num">Deuda</th><th class="num">Mora</th>
+                <th>Tramo</th><th>Estado importado</th><th>Teléfonos</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div class="paginacion">
+          <button class="btn secundario" id="pag-anterior">Anterior</button>
+          <span id="pag-info"></span>
+          <button class="btn secundario" id="pag-siguiente">Siguiente</button>
+        </div>
+      </section>
+
+      <!-- ============================== TELÉFONO ============================== -->
+      <section class="vista" data-vista="telefono">
+        <header class="cabecera">
+          <div>
+            <h1>Teléfono</h1>
+            <p class="bajada">Phoenix Mobile realiza las llamadas con la SIM del teléfono Android, conectado por Wi‑Fi.</p>
+          </div>
+        </header>
+
+        <div class="rejilla-dos mitades">
+          <section class="bloque">
+            <h2>Conexión</h2>
+            <label class="campo">
+              <span>IP que muestra Phoenix Mobile</span>
+              <input type="text" id="movil-ip" placeholder="192.168.1.25" inputmode="decimal" />
+            </label>
+            <button class="btn primario" id="btn-probar-movil">Probar conexión</button>
+
+            <div class="ficha-movil" id="ficha-movil" data-estado="desconocido">
+              <p class="ficha-titulo" id="movil-titulo">Sin probar</p>
+              <p id="movil-detalle" class="bajada">Escribe la IP y prueba la conexión.</p>
+            </div>
+
+            <h2 class="separado">Cola de llamadas</h2>
+            <p class="bajada">La cola usa los teléfonos importados y excluye clientes con estado de pago o cierre.</p>
+            <div class="ficha-movil" id="ficha-cola" data-estado="desconocido">
+              <p class="ficha-titulo" id="cola-titulo">Cola sin consultar</p>
+              <p id="cola-detalle" class="bajada">Consulta la cartera para obtener el siguiente teléfono elegible.</p>
+            </div>
+            <div class="acciones separado">
+              <button class="btn primario" id="btn-iniciar-cola">Iniciar cola</button>
+              <button class="btn secundario" id="btn-detener-cola" disabled>Detener cola</button>
+            </div>
+
+            <h2 class="separado">Llamada manual</h2>
+            <label class="campo">
+              <span>Número</span>
+              <input type="tel" id="movil-numero" placeholder="+56912345678" />
+            </label>
+            <button class="btn primario" id="btn-llamar-manual">Llamar</button>
+          </section>
+
+          <section class="bloque">
+            <h2>Cómo conectar</h2>
+            <ol class="pasos">
+              <li>Instala y abre <strong>Phoenix Mobile</strong> en el teléfono Android.</li>
+              <li>Acepta el permiso para realizar llamadas.</li>
+              <li>Conecta el PC y el teléfono a la misma red Wi‑Fi.</li>
+              <li>Escribe la IP que aparece en el teléfono y pulsa «Probar conexión».</li>
+              <li>En <em>Clientes</em>, pulsa un número para llamar. Cada llamada queda registrada.</li>
+            </ol>
+
+          </section>
+        </div>
+
+        <section class="bloque separado">
+          <h2>Últimas llamadas</h2>
+          <div class="tabla-envoltura">
+            <table id="tabla-llamadas">
+              <thead><tr><th>Fecha</th><th>Cliente</th><th>Detalle</th><th>Resultado</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <!-- ============================== HISTORIAL ============================== -->
+      <section class="vista" data-vista="historial">
+        <header class="cabecera">
+          <div>
+            <h1>Historial de importaciones</h1>
+            <p class="bajada">Una fila por cada hoja o archivo CSV cargado.</p>
+          </div>
+          <div class="acciones-cabecera">
+            <button class="btn peligro" id="btn-borrar-importaciones" type="button">Borrar datos importados</button>
+          </div>
+        </header>
+        <div class="nota-prueba">Esta opción es sólo para pruebas. Elimina clientes, teléfonos, operaciones, gestiones e historial importado, pero conserva la configuración de la aplicación.</div>
+        <div class="tabla-envoltura">
+          <table id="tabla-historial">
+            <thead>
+              <tr>
+                <th>Fecha</th><th>Archivo</th><th>Hoja</th>
+                <th class="num">Cargados</th><th class="num">Corregidos</th><th class="num">Con error</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============================== SERVIDOR ============================== -->
+      <section class="vista" data-vista="servidor">
+        <header class="cabecera">
+          <div>
+            <h1>Servidor</h1>
+            <p class="bajada">El backend atiende a esta ventana y, si lo permites, a navegadores de otros equipos.</p>
+          </div>
+        </header>
+
+        <div class="rejilla-dos">
+          <section class="bloque">
+            <h2>Estado</h2>
+            <div class="ficha-movil" id="ficha-servidor" data-estado="desconocido">
+              <p class="ficha-titulo" id="servidor-titulo">Consultando…</p>
+              <ul class="urls" id="servidor-urls"></ul>
+            </div>
+
+            <form id="form-servidor" class="config-servidor">
+              <label class="interruptor"><input type="checkbox" id="srv-habilitado" /> <span>Servidor HTTP activo</span></label>
+              <label class="interruptor"><input type="checkbox" id="srv-red" /> <span>Permitir acceso desde otros equipos de la red</span></label>
+              <label class="campo corto"><span>Puerto</span><input type="number" id="srv-puerto" min="1024" max="65535" /></label>
+              <button type="submit" class="btn primario">Guardar y reiniciar servidor</button>
+              <p class="bajada" id="srv-nota"></p>
+            </form>
+          </section>
+
+          <section class="bloque">
+            <h2>Cómo se conectan las piezas</h2>
+            <div class="diagrama" aria-label="Diagrama de arquitectura">
+              <div class="d-fila">
+                <div class="d-caja cliente">Ventana Electron<small>renderer</small></div>
+                <div class="d-caja cliente">Navegador u otro PC<small>http://…:3737</small></div>
+              </div>
+              <div class="d-fila d-flechas"><span>IPC</span><span>HTTP / JSON</span></div>
+              <div class="d-fila"><div class="d-caja nucleo">Servicios del backend<small>cartera, importación y llamadas</small></div></div>
+              <div class="d-fila d-flechas"><span>SQL</span><span>Wi‑Fi :8765</span></div>
+              <div class="d-fila">
+                <div class="d-caja dato">SQLite local<small>phoenix_local.db</small></div>
+                <div class="d-caja movil">Phoenix Mobile<small>Android con SIM</small></div>
+              </div>
+            </div>
+            <p class="bajada separado">Para montar sólo el backend sin ventana: <code>npm run servidor</code>.</p>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="avisos" id="avisos" aria-live="polite"></div>
+
+  <script src="api.js"></script>
+  <script src="renderer.js"></script>
 </body>
 </html>
