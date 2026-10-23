@@ -25,13 +25,13 @@ interface PhoenixAPI {
   obtenerSesion(): Promise<Phoenix.Respuesta<Phoenix.UsuarioSesion | null>>;
   logout(): Promise<Phoenix.Respuesta<boolean>>;
   elegirArchivoExcel(): Promise<string | null>;
-  importarExcel(ruta: string): Promise<{ ok: boolean; resultado?: Phoenix.ResultadoImportacion; error?: string }>;
-  obtenerResumen(): Promise<Phoenix.ResumenCartera>;
+  importarExcel(ruta: string, periodoId?: string): Promise<{ ok: boolean; resultado?: Phoenix.ResultadoImportacion; error?: string }>;
+  obtenerResumen(periodoId?: string): Promise<Phoenix.ResumenCartera>;
   obtenerHistorial(): Promise<Phoenix.ImportacionHistorial[]>;
   previsualizarArchivo(ruta: string): Promise<Phoenix.Respuesta<Phoenix.PreviaArchivo>>;
   rutaDeArchivo(archivo: File): string;
   listarClientes(filtro: Phoenix.FiltroClientes): Promise<Phoenix.Respuesta<Phoenix.PaginaClientes>>;
-  listarCategorias(): Promise<Phoenix.Respuesta<string[]>>;
+  listarCategorias(periodoId?: string): Promise<Phoenix.Respuesta<string[]>>;
   obtenerMovil(): Promise<Phoenix.Respuesta<{ ip: string | null }>>;
   probarMovil(ip?: string): Promise<Phoenix.Respuesta<Phoenix.EstadoMovil>>;
   llamarMovil(numero: string, clienteId?: string | null): Promise<Phoenix.Respuesta<Phoenix.ResultadoLlamada>>;
@@ -65,11 +65,11 @@ interface ClienteBackend {
   elegirArchivo(): Promise<ArchivoSeleccionado | null>;
   desdeArchivoSoltado(archivo: File): ArchivoSeleccionado;
   previsualizar(a: ArchivoSeleccionado): Promise<Phoenix.PreviaArchivo>;
-  importar(a: ArchivoSeleccionado): Promise<Phoenix.ResultadoImportacion>;
-  resumen(): Promise<Phoenix.ResumenCartera>;
+  importar(a: ArchivoSeleccionado, periodoId?: string): Promise<Phoenix.ResultadoImportacion>;
+  resumen(periodoId?: string): Promise<Phoenix.ResumenCartera>;
   historial(): Promise<Phoenix.ImportacionHistorial[]>;
   clientes(filtro: Phoenix.FiltroClientes): Promise<Phoenix.PaginaClientes>;
-  categorias(): Promise<string[]>;
+  categorias(periodoId?: string): Promise<string[]>;
   movil(): Promise<{ ip: string | null }>;
   probarMovil(ip?: string): Promise<Phoenix.EstadoMovil>;
   llamar(numero: string, clienteId?: string | null): Promise<Phoenix.ResultadoLlamada>;
@@ -112,15 +112,15 @@ function crearClienteElectron(ipc: PhoenixAPI): ClienteBackend {
     },
     desdeArchivoSoltado: (archivo) => ({ nombre: archivo.name, ruta: ipc.rutaDeArchivo(archivo) }),
     previsualizar: async (a) => desenvolver(await ipc.previsualizarArchivo(a.ruta!)),
-    async importar(a) {
-      const r = await ipc.importarExcel(a.ruta!);
+    async importar(a, periodoId) {
+      const r = await ipc.importarExcel(a.ruta!, periodoId);
       if (!r.ok) throw new Error(r.error);
       return r.resultado!;
     },
-    resumen: () => ipc.obtenerResumen(),
+    resumen: (periodoId) => ipc.obtenerResumen(periodoId),
     historial: () => ipc.obtenerHistorial(),
     clientes: async (f) => desenvolver(await ipc.listarClientes(f)),
-    categorias: async () => desenvolver(await ipc.listarCategorias()),
+    categorias: async (periodoId) => desenvolver(await ipc.listarCategorias(periodoId)),
     movil: async () => desenvolver(await ipc.obtenerMovil()),
     probarMovil: async (ip) => desenvolver(await ipc.probarMovil(ip)),
     llamar: async (n, id) => desenvolver(await ipc.llamarMovil(n, id ?? null)),
@@ -190,18 +190,19 @@ function crearClienteWeb(): ClienteBackend {
     },
     desdeArchivoSoltado: (archivo) => ({ nombre: archivo.name, archivo }),
     previsualizar: (a) => subir("/api/importar/previsualizar", a),
-    importar: (a) => subir("/api/importar", a),
-    resumen: () => pedir("/api/resumen"),
+    importar: (a, periodoId) => subir(`/api/importar${periodoId ? `?periodoId=${encodeURIComponent(periodoId)}` : ""}`, a),
+    resumen: (periodoId) => pedir(`/api/resumen${periodoId ? `?periodoId=${encodeURIComponent(periodoId)}` : ""}`),
     historial: () => pedir("/api/historial"),
     clientes(f) {
       const q = new URLSearchParams();
+      if (f.periodoId) q.set("periodoId", f.periodoId);
       if (f.texto) q.set("texto", f.texto);
       if (f.categoria) q.set("categoria", f.categoria);
       q.set("pagina", String(f.pagina ?? 1));
       q.set("porPagina", String(f.porPagina ?? 50));
       return pedir(`/api/clientes?${q}`);
     },
-    categorias: () => pedir("/api/categorias"),
+    categorias: (periodoId) => pedir(`/api/categorias${periodoId ? `?periodoId=${encodeURIComponent(periodoId)}` : ""}`),
     movil: () => pedir("/api/movil"),
     probarMovil: (ip) => postJson("/api/movil/probar", { ip }),
     llamar: (numero, clienteId) => postJson("/api/movil/llamar", { numero, clienteId: clienteId ?? null }),

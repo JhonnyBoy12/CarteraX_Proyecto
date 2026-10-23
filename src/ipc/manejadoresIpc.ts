@@ -87,16 +87,16 @@ export function registrarManejadoresIpc(
     return resultado.filePaths[0];
   });
 
-  ipcMain.handle("importacion:ejecutar", async (_evento, rutaArchivo: string) => {
+  ipcMain.handle("importacion:ejecutar", async (_evento, rutaArchivo: string, periodoId?: string) => {
     try {
-      const resultado = cartera.importar(obtenerDb(), rutaArchivo);
+      const resultado = cartera.importar(obtenerDb(), rutaArchivo, undefined, undefined, periodoId);
       return { ok: true, resultado };
     } catch (err) {
       return { ok: false, error: (err as Error).message };
     }
   });
 
-  ipcMain.handle("resumen:obtener", async () => cartera.obtenerResumen(obtenerDb()));
+  ipcMain.handle("resumen:obtener", async (_evento, periodoId?: string) => cartera.obtenerResumen(obtenerDb(), periodoId));
 
   ipcMain.handle("importaciones:historial", async () => cartera.obtenerHistorial(obtenerDb()));
 
@@ -108,7 +108,7 @@ export function registrarManejadoresIpc(
     envolver(() => cartera.buscarClientes(obtenerDb(), filtro))
   );
 
-  ipcMain.handle("clientes:categorias", () => envolver(() => cartera.obtenerCategorias(obtenerDb())));
+  ipcMain.handle("clientes:categorias", (_evento, periodoId?: string) => envolver(() => cartera.obtenerCategorias(obtenerDb(), periodoId)));
 
   ipcMain.handle("movil:obtener", () => envolver(() => ({ ip: movil.obtenerIpMovil(obtenerDb()) })));
 

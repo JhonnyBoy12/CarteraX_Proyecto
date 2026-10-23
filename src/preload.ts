@@ -19,10 +19,10 @@ contextBridge.exposeInMainWorld("phoenixAPI", {
   elegirArchivoExcel: (): Promise<string | null> => ipcRenderer.invoke("dialogo:elegir-excel"),
 
   /** Importa un archivo (Excel o CSV) por su ruta. */
-  importarExcel: (rutaExcel: string) => ipcRenderer.invoke("importacion:ejecutar", rutaExcel),
+  importarExcel: (rutaExcel: string, periodoId?: string) => ipcRenderer.invoke("importacion:ejecutar", rutaExcel, periodoId),
 
   /** Resumen de cartera para el panel. */
-  obtenerResumen: () => ipcRenderer.invoke("resumen:obtener"),
+  obtenerResumen: (periodoId?: string) => ipcRenderer.invoke("resumen:obtener", periodoId),
 
   /** Historial de importaciones. */
   obtenerHistorial: () => ipcRenderer.invoke("importaciones:historial"),
@@ -45,7 +45,7 @@ contextBridge.exposeInMainWorld("phoenixAPI", {
   rutaDeArchivo: (archivo: File): string => webUtils.getPathForFile(archivo),
 
   listarClientes: (filtro: unknown) => ipcRenderer.invoke("clientes:listar", filtro),
-  listarCategorias: () => ipcRenderer.invoke("clientes:categorias"),
+  listarCategorias: (periodoId?: string) => ipcRenderer.invoke("clientes:categorias", periodoId),
 
   obtenerMovil: () => ipcRenderer.invoke("movil:obtener"),
   probarMovil: (ip?: string) => ipcRenderer.invoke("movil:probar", ip),

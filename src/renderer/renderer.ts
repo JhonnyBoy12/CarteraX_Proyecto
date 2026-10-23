@@ -184,16 +184,118 @@ function pintarFranjaTramos(tramos: Phoenix.TramoConteo[]): void {
  * Carga KPIs, franja de mora, top de deuda y distribución por gestión.
  * (Nombre conservado de la v0.1.0.)
  */
+let periodoSeleccionado: string | undefined;
+
+function pintarSelectoresPeriodo(periodos: Phoenix.PeriodoCartera[], seleccionado?: string): void {
+  const opciones = periodos.length
+    ? periodos.map((p) => `<option value="${esc(p.id)}">${esc(p.nombre)} · ${formatoNumero(p.total_clientes)} clientes</option>`).join("")
+    : `<option value="">Sin períodos disponibles</option>`;
+  for (const id of ["periodo-panel", "periodo-clientes", "periodo-importacion"]) {
+    const select = $(id) as HTMLSelectElement;
+    const anterior = seleccionado ?? select.value;
+    select.innerHTML = opciones;
+    select.value = periodos.some((p) => p.id === anterior) ? anterior : (periodos[0]?.id ?? "");
+  }
+}
+
+function pintarPeriodoEnSelectores(periodoId?: string): void {
+  for (const id of ["periodo-panel", "periodo-clientes", "periodo-importacion"]) {
+    const select = $(id) as HTMLSelectElement;
+    select.value = periodoId ?? "";
+  }
+}
+
+/** Nombre legible del período seleccionado en los controles de cartera. */
+function nombrePeriodoSeleccionado(): string {
+  const select = $("periodo-panel") as HTMLSelectElement;
+  return select.selectedOptions[0]?.textContent?.split(" · ")[0] ?? "Sin período";
+}
+
+let historialEvolucion: Phoenix.PuntoEvolucionCartera[] = [];
+
+/** Dibuja un gráfico SVG liviano, adaptable y sin dependencias externas. */
+function pintarEvolucion(historial: Phoenix.PuntoEvolucionCartera[]): void {
+  historialEvolucion = historial ?? [];
+  const rango = ($("filtro-evolucion-rango") as HTMLSelectElement).value || "6";
+  const metrica = ($("filtro-evolucion-metrica") as HTMLSelectElement).value || "deuda";
+  const puntos = rango === "todos" ? historialEvolucion : historialEvolucion.slice(-Math.max(1, Number(rango) || 6));
+  const deuda = metrica === "deuda";
+  const etiqueta = deuda ? "Deuda total" : "Cantidad de clientes";
+  $("evolucion-etiqueta").textContent = etiqueta;
+  $("evolucion-subtitulo").textContent = deuda ? "Deuda total por período importado" : "Clientes incluidos en cada cartera mensual";
+  $("evolucion-nota").textContent = deuda
+    ? "Cada punto representa la deuda total de una cartera importada. Los meses se muestran por separado, sin acumular sus montos."
+    : "Cada punto representa los clientes únicos de una cartera importada en ese período.";
+
+  const actual = historialEvolucion.find((p) => p.periodo_id === periodoSeleccionado) ?? historialEvolucion[historialEvolucion.length - 1];
+  $("evolucion-valor-actual").textContent = actual
+    ? (deuda ? formatoMontoCorto(actual.deuda_total) : formatoNumero(actual.total_clientes))
+    : "—";
+  $("evolucion-periodo-actual").textContent = actual ? actual.periodo : "Sin períodos importados";
+
+  const contenedor = $("grafico-evolucion");
+  if (!puntos.length) {
+    contenedor.innerHTML = '<p class="grafico-vacio">Todavía no hay períodos importados para comparar.</p>';
+    return;
+  }
+
+  const W = 820, H = 248, L = 58, R = 20, T = 18, B = 42;
+  const plotW = W - L - R, plotH = H - T - B;
+  const valores = puntos.map((p) => deuda ? Number(p.deuda_total) || 0 : Number(p.total_clientes) || 0);
+  const maxDato = Math.max(1, ...valores);
+  const techo = maxDato * 1.12;
+  const x = (i: number) => L + (puntos.length === 1 ? plotW / 2 : (i / (puntos.length - 1)) * plotW);
+  const y = (v: number) => T + plotH - (v / techo) * plotH;
+  const coords = valores.map((v, i) => [x(i), y(v)] as const);
+  const linea = coords.map(([px, py], i) => `${i ? "L" : "M"}${px.toFixed(1)},${py.toFixed(1)}`).join(" ");
+  const area = `${linea} L${coords[coords.length - 1][0].toFixed(1)},${(T + plotH).toFixed(1)} L${coords[0][0].toFixed(1)},${(T + plotH).toFixed(1)} Z`;
+  const lineasGuia = [0, 1, 2, 3].map((i) => {
+    const v = techo * (i / 3); const py = y(v);
+    const texto = deuda ? formatoMontoCorto(v) : formatoNumero(v);
+    return `<g><line x1="${L}" y1="${py}" x2="${W - R}" y2="${py}" class="grafico-guia"/><text x="${L - 10}" y="${py + 4}" text-anchor="end" class="grafico-eje">${esc(texto)}</text></g>`;
+  }).join("");
+  const etiquetasX = puntos.map((p, i) => {
+    const mostrar = puntos.length <= 6 || i === 0 || i === puntos.length - 1 || i === Math.round((puntos.length - 1) / 2);
+    if (!mostrar) return "";
+    const seleccionado = p.periodo_id === periodoSeleccionado;
+    return `<text x="${x(i)}" y="${H - 13}" text-anchor="middle" class="grafico-eje ${seleccionado ? "grafico-eje-activo" : ""}">${esc(p.periodo)}</text>`;
+  }).join("");
+  const marcadores = coords.map(([px, py], i) => {
+    const p = puntos[i]; const v = valores[i];
+    const seleccionado = p.periodo_id === periodoSeleccionado;
+    const valor = deuda ? formatoMoneda(v) : `${formatoNumero(v)} clientes`;
+    return `<circle cx="${px}" cy="${py}" r="${seleccionado ? 5 : 3.5}" class="grafico-marcador ${seleccionado ? "seleccionado" : ""}"><title>${esc(p.periodo)}: ${esc(valor)}</title></circle>`;
+  }).join("");
+  contenedor.innerHTML = `<svg class="evolucion-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><defs><linearGradient id="evolucion-area" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#e8630a" stop-opacity=".18"/><stop offset="100%" stop-color="#e8630a" stop-opacity=".015"/></linearGradient></defs>${lineasGuia}<path d="${area}" class="grafico-area"/><path d="${linea}" class="grafico-linea"/>${marcadores}${etiquetasX}</svg>`;
+}
+
 async function cargarResumen(): Promise<void> {
   let resumen: Phoenix.ResumenCartera;
   try {
-    resumen = await Api.resumen();
+    resumen = await Api.resumen(periodoSeleccionado);
+    if (!periodoSeleccionado && resumen.periodoId) periodoSeleccionado = resumen.periodoId;
+    pintarSelectoresPeriodo(resumen.periodos ?? [], periodoSeleccionado);
+    pintarEvolucion(resumen.historialDeuda ?? []);
   } catch (e) {
     aviso(`No se pudo cargar el panel: ${(e as Error).message}`, "error");
     return;
   }
 
   const hayDatos = resumen.totalClientes > 0;
+  const nombrePeriodo = nombrePeriodoSeleccionado();
+  $("panel-periodo-activo").textContent = `Período consultado: ${nombrePeriodo}`;
+  if (!hayDatos) {
+    $("panel-bajada").textContent = "No hay clientes cargados para este período.";
+    $("kpi-deuda").textContent = "$0";
+    $("kpi-clientes").textContent = "0";
+    $("kpi-mora").textContent = "—";
+    $("kpi-recuperacion").textContent = "—";
+    $("kpi-telefono").textContent = "0";
+    $("kpi-llamadas").textContent = "0";
+    $("tabla-top").querySelector("tbody")!.innerHTML = filaVacia(5, "No hay datos para este período.");
+    $("barras-categorias").innerHTML = "";
+    pintarFranjaTramos([]);
+  }
   $("panel-vacio").hidden = hayDatos;
   $("panel-datos").hidden = !hayDatos;
   if (!hayDatos) return;
@@ -354,12 +456,25 @@ function pintarHojaPrevia(hoja: Phoenix.PreviaHoja): void {
 /** Importa el archivo de la vista previa y muestra el resultado. */
 async function confirmarImportacion(): Promise<void> {
   if (!archivoElegido) return;
+  const mesManual = ($("periodo-importacion-nuevo") as HTMLInputElement).value.trim();
+  const destinoImportacion = mesManual || (($('periodo-importacion') as HTMLSelectElement).value || periodoSeleccionado || "");
+  if (!destinoImportacion) {
+    aviso("Selecciona un período existente o indica el mes de destino antes de importar.", "error");
+    return;
+  }
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(destinoImportacion)) {
+    aviso("El período debe tener un formato válido (AAAA-MM).", "error");
+    return;
+  }
+  const destino = destinoImportacion;
+  const aceptar = window.confirm(`La importación reemplazará los datos de la cartera de ${destino}. Se conservarán el historial de importaciones y las gestiones registradas. ¿Deseas continuar?`);
+  if (!aceptar) return;
   const boton = $("btn-confirmar-importacion") as HTMLButtonElement;
   boton.disabled = true;
   boton.textContent = "Importando…";
 
   try {
-    const r = await Api.importar(archivoElegido);
+    const r = await Api.importar(archivoElegido, destinoImportacion);
     const cargados = r.hojas.reduce((s, h) => s + h.cargados, 0);
     const errores = r.hojas.reduce((s, h) => s + h.conError, 0);
 
@@ -385,7 +500,13 @@ async function confirmarImportacion(): Promise<void> {
         </p>
       </section>`;
     aviso(`Importados ${formatoNumero(cargados)} clientes`, "ok");
-    cargarCategorias();
+    // Tras importar, selecciona el período real de destino (incluidos los meses recién creados).
+    periodoSeleccionado = destinoImportacion;
+    ($("periodo-importacion-nuevo") as HTMLInputElement).value = "";
+    void cargarResumen().then(() => {
+      cargarCategorias();
+      if (vistaActual === "clientes") cargarClientes();
+    });
     archivoElegido = null;
     previaActual = null;
   } catch (e) {
@@ -444,7 +565,9 @@ let totalPaginas = 1;
 /** Carga la página actual de clientes según el filtro. */
 async function cargarClientes(): Promise<void> {
   const cuerpo = document.querySelector("#tabla-clientes tbody")!;
+  $("clientes-bajada").textContent = `Cartera de ${nombrePeriodoSeleccionado()}. Busca por RUT o nombre y llama desde el teléfono conectado.`;
   try {
+    filtroClientes.periodoId = periodoSeleccionado;
     const r = await Api.clientes(filtroClientes);
     totalPaginas = Math.max(1, Math.ceil(r.total / r.porPagina));
     $("pag-info").textContent = `Página ${r.pagina} de ${totalPaginas}, ${formatoNumero(r.total)} clientes`;
@@ -479,7 +602,7 @@ async function cargarClientes(): Promise<void> {
 /** Llena el selector de categorías de gestión. */
 async function cargarCategorias(): Promise<void> {
   try {
-    const cats = await Api.categorias();
+    const cats = await Api.categorias(periodoSeleccionado);
     const sel = $("filtro-categoria") as HTMLSelectElement;
     const actual = sel.value;
     sel.innerHTML = `<option value="">Todos los estados</option>` + cats.map((c) => `<option>${esc(c)}</option>`).join("");
@@ -515,6 +638,51 @@ function prepararClientes(): void {
       filtroClientes.pagina = 1;
       cargarClientes();
     }, 250);
+  });
+  $("btn-filtros").addEventListener("click", () => {
+    const panel = $("filtros-avanzados");
+    panel.hidden = !panel.hidden;
+    $("btn-filtros").setAttribute("aria-expanded", String(!panel.hidden));
+  });
+  $("btn-limpiar-filtros").addEventListener("click", () => {
+    filtroClientes.categoria = "";
+    filtroClientes.texto = "";
+    ($("buscar-cliente") as HTMLInputElement).value = "";
+    ($("filtro-categoria") as HTMLSelectElement).value = "";
+    filtroClientes.pagina = 1;
+    cargarClientes();
+  });
+  $("periodo-panel").addEventListener("change", (e) => {
+    periodoSeleccionado = (e.target as HTMLSelectElement).value || undefined;
+    filtroClientes.periodoId = periodoSeleccionado;
+    filtroClientes.pagina = 1;
+    pintarPeriodoEnSelectores(periodoSeleccionado);
+    cargarResumen();
+    cargarCategorias();
+    if (vistaActual === "clientes") cargarClientes();
+  });
+  $("periodo-clientes").addEventListener("change", (e) => {
+    periodoSeleccionado = (e.target as HTMLSelectElement).value || undefined;
+    filtroClientes.periodoId = periodoSeleccionado;
+    filtroClientes.pagina = 1;
+    pintarPeriodoEnSelectores(periodoSeleccionado);
+    cargarResumen();
+    cargarCategorias();
+    cargarClientes();
+  });
+  $("periodo-importacion").addEventListener("change", (e) => {
+    ($("periodo-importacion-nuevo") as HTMLInputElement).value = "";
+    periodoSeleccionado = (e.target as HTMLSelectElement).value || undefined;
+    filtroClientes.periodoId = periodoSeleccionado;
+    filtroClientes.pagina = 1;
+    pintarPeriodoEnSelectores(periodoSeleccionado);
+    cargarResumen();
+    cargarCategorias();
+    if (vistaActual === "clientes") cargarClientes();
+  });
+  $("periodo-importacion-nuevo").addEventListener("change", () => {
+    const mes = ($("periodo-importacion-nuevo") as HTMLInputElement).value;
+    if (mes) ($("periodo-importacion") as HTMLSelectElement).value = "";
   });
   $("filtro-categoria").addEventListener("change", (e) => {
     filtroClientes.categoria = (e.target as HTMLSelectElement).value;
@@ -815,6 +983,16 @@ function mostrarAplicacion(usuario: Phoenix.UsuarioSesion): void {
 
 /** Configura el formulario de autenticación y el cierre de sesión. */
 function prepararAutenticacion(): void {
+  $("login-toggle-password").addEventListener("click", () => {
+    const campo = $("login-password") as HTMLInputElement;
+    const boton = $("login-toggle-password") as HTMLButtonElement;
+    const mostrar = campo.type === "password";
+    campo.type = mostrar ? "text" : "password";
+    boton.textContent = mostrar ? "Ocultar" : "Mostrar";
+    boton.setAttribute("aria-label", mostrar ? "Ocultar contraseña" : "Mostrar contraseña");
+    boton.setAttribute("aria-pressed", String(mostrar));
+  });
+
   $("form-login").addEventListener("submit", async (ev) => {
     ev.preventDefault();
     const error = $("login-error");
@@ -857,6 +1035,8 @@ async function iniciar(): Promise<void> {
     if (destino) irA(destino.dataset.ir!);
   });
   $("btn-actualizar").addEventListener("click", () => { cargarResumen(); aviso("Panel actualizado"); });
+  $("filtro-evolucion-rango").addEventListener("change", () => pintarEvolucion(historialEvolucion));
+  $("filtro-evolucion-metrica").addEventListener("change", () => pintarEvolucion(historialEvolucion));
 
   $("modo-app").textContent = Api.modo === "electron" ? "App de escritorio" : `Navegador conectado a ${location.host}`;
 

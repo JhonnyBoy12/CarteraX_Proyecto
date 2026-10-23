@@ -22,6 +22,8 @@ import {
   distribucionTramos,
   listarClientes,
   listarCategorias,
+  listarPeriodos,
+  evolucionCartera,
 } from "../db/consultas";
 import { importarArchivo } from "../importacion/importador";
 import { previsualizarArchivo } from "../importacion/previsualizador";
@@ -33,13 +35,18 @@ import { previsualizarArchivo } from "../importacion/previsualizador";
  * @param db Conexión SQLite.
  * @param top Cantidad de clientes en el ranking de deuda (por defecto 5, como v0.1.0).
  */
-export function obtenerResumen(db: Database.Database, top = 5): Phoenix.ResumenCartera {
+export function obtenerResumen(db: Database.Database, periodoId?: string, top = 5): Phoenix.ResumenCartera {
+  const periodos = listarPeriodos(db);
+  const periodoSeleccionado = periodoId ?? periodos[0]?.id;
   return {
-    totalClientes: contarClientes(db),
-    topDeuda: topClientesPorDeuda(db, top),
-    categorias: distribucionCategorias(db),
-    indicadores: obtenerIndicadores(db),
-    tramos: distribucionTramos(db),
+    periodoId: periodoSeleccionado ?? null,
+    periodos,
+    historialDeuda: evolucionCartera(db),
+    totalClientes: contarClientes(db, periodoSeleccionado),
+    topDeuda: topClientesPorDeuda(db, top, periodoSeleccionado),
+    categorias: distribucionCategorias(db, periodoSeleccionado),
+    indicadores: obtenerIndicadores(db, periodoSeleccionado),
+    tramos: distribucionTramos(db, periodoSeleccionado),
   };
 }
 
@@ -64,8 +71,8 @@ export function buscarClientes(db: Database.Database, filtro: Phoenix.FiltroClie
  * Categorías de gestión disponibles para filtrar.
  * @param db Conexión SQLite.
  */
-export function obtenerCategorias(db: Database.Database): string[] {
-  return listarCategorias(db);
+export function obtenerCategorias(db: Database.Database, periodoId?: string): string[] {
+  return listarCategorias(db, periodoId);
 }
 
 /**
@@ -88,7 +95,8 @@ export function importar(
   db: Database.Database,
   ruta: string,
   nombreOriginal?: string,
-  usuarioId: string | null = null
+  usuarioId: string | null = null,
+  periodoId?: string
 ): Phoenix.ResultadoImportacion {
-  return importarArchivo(db, ruta, usuarioId, nombreOriginal);
+  return importarArchivo(db, ruta, usuarioId, nombreOriginal, periodoId);
 }

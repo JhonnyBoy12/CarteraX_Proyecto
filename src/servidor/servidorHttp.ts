@@ -222,18 +222,19 @@ export function iniciarServidor(db: Database.Database, opciones: OpcionesServido
   /** Tabla de rutas: "MÉTODO /ruta" → manejador. */
   const rutas: Record<string, (req: http.IncomingMessage, url: URL) => Promise<unknown> | unknown> = {
     "GET /api/salud": () => ({ app: "ERS Phoenix", version: VERSION, modo: opciones.modo, hora: new Date().toISOString() }),
-    "GET /api/resumen": () => cartera.obtenerResumen(db),
+    "GET /api/resumen": (_req, url) => cartera.obtenerResumen(db, url.searchParams.get("periodoId") ?? undefined),
     "GET /api/historial": () => cartera.obtenerHistorial(db),
-    "GET /api/categorias": () => cartera.obtenerCategorias(db),
+    "GET /api/categorias": (_req, url) => cartera.obtenerCategorias(db, url.searchParams.get("periodoId") ?? undefined),
     "GET /api/clientes": (_req, url) =>
       cartera.buscarClientes(db, {
+        periodoId: url.searchParams.get("periodoId") ?? undefined,
         texto: url.searchParams.get("texto") ?? undefined,
         categoria: url.searchParams.get("categoria") ?? undefined,
         pagina: Number(url.searchParams.get("pagina") ?? 1),
         porPagina: Number(url.searchParams.get("porPagina") ?? 50),
       }),
     "POST /api/importar/previsualizar": (req) => conArchivoSubido(req, (ruta, nombre) => cartera.previsualizar(ruta, nombre)),
-    "POST /api/importar": (req) => conArchivoSubido(req, (ruta, nombre) => cartera.importar(db, ruta, nombre)),
+    "POST /api/importar": (req) => conArchivoSubido(req, (ruta, nombre) => cartera.importar(db, ruta, nombre, null, new URL(req.url ?? "/", "http://localhost").searchParams.get("periodoId") ?? undefined)),
     "GET /api/movil": () => ({ ip: movil.obtenerIpMovil(db) }),
     "POST /api/movil/probar": async (req) => {
       const { ip } = await leerJson(req);

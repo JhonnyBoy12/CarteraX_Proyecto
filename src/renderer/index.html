@@ -11,21 +11,49 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:" />
-  <title>ERS Phoenix — Gestión de cartera</title>
+  <title>CarteraX — Gestión de cartera</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 
   <section class="pantalla-login" id="pantalla-login">
+    <div class="login-presentacion" aria-label="Identidad de CarteraX Phoenix">
+      <div class="login-orbita login-orbita-una" aria-hidden="true"></div>
+      <div class="login-orbita login-orbita-dos" aria-hidden="true"></div>
+      <div class="login-identidad">
+        <span class="login-emblema" aria-hidden="true"><span></span></span>
+        <div>
+          <p class="login-supra">PLATAFORMA DE GESTIÓN</p>
+          <div class="login-wordmark">Cartera<span>X</span></div>
+          <p class="login-phoenix">PHOENIX <span>·</span> GESTIÓN COMERCIAL</p>
+        </div>
+      </div>
+      <div class="login-mensaje">
+        <p class="login-etiqueta">CONTROL · SEGUIMIENTO · RESULTADOS</p>
+        <h2>Tu cartera,<br><span>bajo control.</span></h2>
+        <p>Una visión clara de tus clientes, tus gestiones y los indicadores de cada período.</p>
+      </div>
+      <div class="login-pie-marca"><span class="login-punto"></span> Entorno de trabajo seguro</div>
+    </div>
+
     <form class="tarjeta-login" id="form-login">
-      <div class="login-marca">CarteraX</div>
+      <div class="login-marca-movil">
+        <span class="login-emblema login-emblema-pequeno" aria-hidden="true"><span></span></span>
+        <span>Cartera<strong>X</strong></span>
+      </div>
+      <p class="login-bienvenida">BIENVENIDO/A</p>
       <h1>Iniciar sesión</h1>
-      <p class="bajada">Ingresa tus credenciales para acceder a la gestión de cartera.</p>
-      <label class="campo-login"><span>Correo</span><input id="login-email" type="email" autocomplete="username" required /></label>
-      <label class="campo-login"><span>Contraseña</span><input id="login-password" type="password" autocomplete="current-password" required /></label>
-      <p class="login-error" id="login-error" hidden></p>
-      <button class="btn primario login-boton" type="submit">Ingresar</button>
-      <p class="login-ayuda">Usuario inicial de prueba: ejecutivo@carterax.cl</p>
+      <p class="bajada">Ingresa con tus credenciales para continuar.</p>
+      <label class="campo-login"><span>Correo electrónico</span><input id="login-email" type="email" autocomplete="username" placeholder="nombre@empresa.cl" required /></label>
+      <label class="campo-login"><span>Contraseña</span>
+        <span class="login-password-wrap">
+          <input id="login-password" type="password" autocomplete="current-password" placeholder="Ingresa tu contraseña" required />
+          <button class="login-ver-clave" id="login-toggle-password" type="button" aria-label="Mostrar contraseña" aria-pressed="false">Mostrar</button>
+        </span>
+      </label>
+      <p class="login-error" id="login-error" role="alert" hidden></p>
+      <button class="btn primario login-boton" type="submit">Ingresar <span aria-hidden="true">→</span></button>
+      <p class="login-ayuda">Acceso exclusivo para usuarios autorizados.</p>
     </form>
   </section>
   <div class="app" id="aplicacion" hidden>
@@ -34,7 +62,7 @@
       <div class="marca">
         <span class="marca-simbolo" aria-hidden="true"></span>
         <div>
-          <strong>ERS Phoenix</strong>
+          <strong>CarteraX</strong>
           <span class="marca-sub">Gestión de cartera</span>
         </div>
       </div>
@@ -71,9 +99,10 @@
         <header class="cabecera">
           <div>
             <h1>Panel de cartera</h1>
-            <p class="bajada" id="panel-bajada">Resumen de los clientes cargados.</p>
+            <div class="panel-contexto"><p class="bajada" id="panel-bajada">Resumen de los clientes cargados.</p><span class="periodo-activo" id="panel-periodo-activo">Período: —</span></div>
           </div>
           <div class="acciones-cabecera">
+            <label class="selector-periodo"><span>Período</span><select id="periodo-panel" aria-label="Período del panel"><option value="">Cargando períodos…</option></select></label>
             <button class="btn secundario" id="btn-actualizar">Actualizar</button>
             <button class="btn primario" data-ir="importar">Importar cartera</button>
           </div>
@@ -86,6 +115,29 @@
         </div>
 
         <div id="panel-datos">
+          <section class="bloque evolucion-bloque" aria-labelledby="evolucion-titulo">
+            <div class="evolucion-cabecera">
+              <div>
+                <p class="evolucion-supra">TENDENCIA DE CARTERA</p>
+                <h2 id="evolucion-titulo">Evolución mensual</h2>
+                <p class="bajada" id="evolucion-subtitulo">Deuda total por período importado</p>
+              </div>
+              <div class="evolucion-filtros" aria-label="Filtros del gráfico de evolución">
+                <label><span>Indicador</span><select id="filtro-evolucion-metrica"><option value="deuda">Deuda total</option><option value="clientes">Cantidad de clientes</option></select></label>
+                <label><span>Períodos</span><select id="filtro-evolucion-rango"><option value="6">Últimos 6</option><option value="3">Últimos 3</option><option value="12">Últimos 12</option><option value="todos">Todos</option></select></label>
+              </div>
+            </div>
+            <div class="evolucion-resumen">
+              <div><span class="evolucion-punto"></span><span id="evolucion-etiqueta">Deuda total</span></div>
+              <strong id="evolucion-valor-actual">—</strong>
+              <span id="evolucion-periodo-actual">Selecciona un período</span>
+            </div>
+            <div class="grafico-evolucion" id="grafico-evolucion" role="img" aria-label="Gráfico de línea de evolución mensual">
+              <p class="grafico-vacio">Cargando evolución de cartera…</p>
+            </div>
+            <p class="evolucion-nota" id="evolucion-nota">Cada punto representa una cartera importada en un período. Los valores no se acumulan entre meses.</p>
+          </section>
+
           <div class="franja-mora" aria-label="Deuda por tramo de mora">
             <div class="franja-titulo">
               <h2>Deuda por tramo de mora</h2>
@@ -129,6 +181,13 @@
           <div>
             <h1>Importar cartera</h1>
             <p class="bajada">Excel (.xlsx, .xls, .xlsm, .ods) o texto delimitado (.csv, .tsv, .txt). Revisa la vista previa antes de cargar.</p>
+            <div class="selector-periodo selector-periodo-importacion">
+              <label for="periodo-importacion">Período existente</label>
+              <select id="periodo-importacion" aria-label="Período existente de destino"><option value="">Cargando períodos…</option></select>
+              <label for="periodo-importacion-nuevo">O crear/seleccionar otro mes</label>
+              <input id="periodo-importacion-nuevo" type="month" aria-label="Nuevo período de destino" />
+            </div>
+            <p class="ayuda-importacion">Elige un período existente o selecciona un mes nuevo. Si ya hay una cartera para ese mes, sus datos se reemplazarán; el historial de importaciones y las gestiones se conservarán.</p>
           </div>
         </header>
 
@@ -167,9 +226,15 @@
           </div>
         </header>
 
-        <div class="filtros">
+        <div class="barra-clientes">
+          <label class="selector-periodo"><span>Período</span><select id="periodo-clientes" aria-label="Período de clientes"><option value="">Cargando períodos…</option></select></label>
           <input type="search" id="buscar-cliente" placeholder="Buscar por RUT o nombre" autocomplete="off" />
+          <button class="btn secundario" id="btn-filtros" type="button" aria-expanded="false" aria-controls="filtros-avanzados">Filtros</button>
+        </div>
+        <div class="filtros" id="filtros-avanzados" hidden>
+          <label for="filtro-categoria">Estado de gestión</label>
           <select id="filtro-categoria"><option value="">Todos los estados</option></select>
+          <button class="btn secundario" id="btn-limpiar-filtros" type="button">Limpiar filtros</button>
         </div>
 
         <div class="tabla-envoltura">

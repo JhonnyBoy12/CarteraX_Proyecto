@@ -13,7 +13,8 @@
     "ejemplos": "node scripts/generar-ejemplos.js",
     "dist": "npm run build && electron-builder",
     "dist:dir": "npm run build && electron-builder --dir",
-    "postinstall": "electron-rebuild -f -w better-sqlite3"
+    "postinstall": "electron-rebuild -f -w better-sqlite3",
+    "prueba:importacion": "npm run build && node pruebas/importacion-segura.prueba.js"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.2.0",

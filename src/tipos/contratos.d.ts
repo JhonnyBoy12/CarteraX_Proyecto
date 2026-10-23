@@ -113,7 +113,26 @@ declare namespace Phoenix {
   }
 
   /** Respuesta de `resumen:obtener` (compatible con 0.1.0 + campos nuevos). */
+  interface PeriodoCartera {
+    id: string;
+    nombre: string;
+    fecha_inicio: string;
+    fecha_fin: string;
+    total_clientes: number;
+  }
+
+  interface PuntoEvolucionCartera {
+    periodo_id: string;
+    periodo: string;
+    fecha_inicio: string;
+    total_clientes: number;
+    deuda_total: number;
+  }
+
   interface ResumenCartera {
+    periodoId?: string | null;
+    periodos?: PeriodoCartera[];
+    historialDeuda?: PuntoEvolucionCartera[];
     totalClientes: number;
     topDeuda: ClienteResumen[];
     categorias: CategoriaConteo[];
@@ -150,6 +169,7 @@ declare namespace Phoenix {
   }
 
   interface FiltroClientes {
+    periodoId?: string;
     texto?: string;
     categoria?: string;
     pagina?: number;
