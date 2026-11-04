@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>CarteraX Phoenix — Documento de arquitectura 4+1</title>
+<style>
+  @font-face { font-family: "Archivo"; src: url("../../src/renderer/assets/fuentes/archivo-variable.woff2") format("woff2"); font-weight: 100 900; font-stretch: 62% 125%; }
+  :root { --noche:#172039; --naranja:#DE762E; --hondo:#A9520F; --durazno:#FCEBDD; --fondo:#EEF0F5; --tinta:#16203A; --pizarra:#515C77; --borde:#C9CFDC; }
+  @page { size: A4; margin: 18mm 19mm 20mm; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #fff; color: var(--tinta); font-family: "Archivo", "Segoe UI", sans-serif; font-size: 10.5pt; line-height: 1.5; }
+  h1, h2, h3 { color: var(--tinta); font-weight: 700; line-height: 1.2; }
+  h2 { font-size: 17pt; margin: 0 0 10pt; padding-bottom: 6pt; border-bottom: 2px solid var(--naranja); break-before: page; break-after: avoid; }
+  h3 { font-size: 12.5pt; margin: 16pt 0 6pt; break-after: avoid; }
+  h4 { font-size: 10.5pt; margin: 12pt 0 4pt; break-after: avoid; }
+  p { margin: 0 0 7pt; text-align: justify; hyphens: auto; }
+  ul, ol { margin: 0 0 8pt; padding-left: 18pt; }
+  li { margin-bottom: 2pt; }
+  code { font-family: "Cascadia Mono", Consolas, monospace; font-size: 8.8pt; background: var(--fondo); padding: 0 3px; border-radius: 3px; }
+  table { width: 100%; border-collapse: collapse; margin: 6pt 0 12pt; font-size: 9pt; break-inside: auto; }
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; }
+  th { background: var(--noche); color: #fff; text-align: left; font-weight: 600; padding: 5pt 6pt; }
+  td { border-bottom: 1px solid var(--borde); padding: 4pt 6pt; vertical-align: top; }
+  tbody tr:nth-child(even) td { background: #F7F8FB; }
+  figure { margin: 10pt 0 14pt; break-inside: avoid; }
+  figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--borde); border-radius: 6px; }
+  figcaption { font-size: 9pt; color: var(--pizarra); margin-top: 5pt; }
+  figcaption b { color: var(--tinta); }
+  .ok { color: #1E6B35; font-weight: 600; }
+  .parcial { color: #8A5A00; font-weight: 600; }
+  .no { color: #B3261E; font-weight: 600; }
+  .gris { color: var(--pizarra); font-weight: 600; }
+  .nota { background: var(--durazno); border: 1px solid #F1C7A3; border-radius: 6px; padding: 7pt 10pt; margin: 8pt 0 12pt; font-size: 9.5pt; break-inside: avoid; }
+  .capturas { display: grid; grid-template-columns: 1fr 1fr; gap: 10pt; margin: 8pt 0 12pt; break-inside: avoid; }
+  table.denso { font-size: 8.6pt; }
+  table.denso td { padding: 3pt 6pt; }
+  .indice { break-before: page; }
+  .indice h3 { font-size: 17pt; margin-top: 0; padding-bottom: 6pt; border-bottom: 2px solid var(--naranja); }
+  .capturas figure { margin: 0; }
+  .capturas img { width: 100%; display: block; border: 1px solid var(--borde); border-radius: 5px; }
+  /* Portada: la pantalla de inicio de sesión de la app, en vertical y a sangre. */
+  @page :first { margin: 0; }
+  .portada { width: 210mm; height: 297mm; display: flex; flex-direction: column; overflow: hidden; }
+  .portada .marca { position: relative; flex: 0 0 165mm; background: linear-gradient(160deg, #BF5520, #A3461A); color: #fff; padding: 0 19mm 22mm; display: flex; flex-direction: column; justify-content: flex-end; }
+  /* La franja de la cartera: los estados de cobranza con sus tonos, en cortes duros. */
+  .portada .marca::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2.2mm;
+    background: linear-gradient(90deg, #1D8749 0 30%, #6A9A26 30% 34%, #DE762E 34% 41%, #1A87A2 41% 47%, #7457C2 47% 66%, #3767C4 66% 79%, #CC860F 79% 89%, #922320 89% 93%, #9AA3AD 93% 100%); }
+  .portada .logo { width: 19mm; height: 19mm; border-radius: 4.5mm; box-shadow: 0 8px 20px rgba(0, 0, 0, .25); margin-bottom: 7mm; }
+  .portada .nombre { font-size: 66pt; font-weight: 800; font-stretch: 70%; letter-spacing: -0.02em; line-height: .95; }
+  .portada .lema { margin: 5mm 0 0; max-width: 30ch; font-size: 14pt; line-height: 1.4; color: #FFE9DC; text-align: left; }
+  .portada .ficha { flex: 1; padding: 15mm 19mm 0; }
+  .portada h1 { font-size: 24pt; font-weight: 700; font-stretch: 86%; margin: 0 0 3mm; }
+  .portada .bajada { max-width: 62ch; font-size: 11pt; color: var(--pizarra); text-align: left; margin-bottom: 9mm; }
+  .portada dl { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm 12mm; margin: 0; }
+  .portada dt { font-size: 9pt; font-weight: 600; color: var(--pizarra); margin-bottom: 1mm; }
+  .portada dd { margin: 0; font-size: 11pt; color: var(--tinta); }
+  .indice ol { list-style: none; padding: 0; }
+  .indice li { padding: 3pt 0; border-bottom: 1px dotted var(--borde); }
+  .indice li ol { padding-left: 14pt; }
+  .indice li li { border: 0; padding: 1pt 0; color: var(--pizarra); }
+  .resumen { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8pt; margin: 8pt 0 12pt; }
+  .resumen div { border: 1px solid var(--borde); border-radius: 6px; padding: 8pt; }
+  .resumen b { display: block; font-size: 18pt; color: var(--hondo); line-height: 1.1; }
+  .resumen span { font-size: 8.5pt; color: var(--pizarra); }
+</style>
+</head>
+<body>
+
+<!-- ============================ PORTADA ============================ -->
+<section class="portada">
+  <div class="marca">
+    <svg class="logo" viewBox="0 0 64 64" role="img" aria-label="Logo de CarteraX">
+      <rect width="64" height="64" rx="15" fill="#16203A"/>
+      <path d="M20 20 L26 26 M38 38 L44 44" fill="none" stroke="#FFFFFF" stroke-width="6.5" stroke-linecap="round"/>
+      <path d="M20 44 L44 20 M31 20 H44 V33" fill="none" stroke="#DE762E" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div class="nombre">CarteraX</div>
+    <p class="lema">Gestión de cartera y cobranza para ejecutivos Phoenix.</p>
+  </div>
+  <div class="ficha">
+    <h1>Documento de arquitectura</h1>
+    <p class="bajada">El sistema descrito con el modelo de vistas 4+1 de Kruchten: escenarios, lógica, desarrollo, procesos y física.</p>
+    <dl>
+      <div><dt>Sistema</dt><dd>CarteraX Phoenix 0.3.1 para escritorio y Phoenix Mobile 0.3.0 para Android</dd></div>
+      <div><dt>Proyecto</dt><dd>Proyecto Capstone Phoenix</dd></div>
+      <div><dt>Equipo</dt><dd>Jhonny Silva, Cristobal Irarrazabal y Diego Cruz</dd></div>
+      <div><dt>Base del análisis</dt><dd>Código fuente, compilación y 96 pruebas automáticas</dd></div>
+      <div><dt>Versión</dt><dd>1.0, 30 de octubre de 2026</dd></div>
+      <div><dt>Clasificación</dt><dd>Uso interno</dd></div>
+    </dl>
+  </div>
+</section>
+
+<!-- ============================ CONTROL ============================ -->
+<h2>Control del documento</h2>
+<table>
+  <thead><tr><th style="width:14%">Versión</th><th style="width:20%">Fecha</th><th>Descripción</th><th style="width:28%">Responsable</th></tr></thead>
+  <tbody><tr><td>1.0</td><td>30-10-2026</td><td>Versión inicial. Levantada desde el código fuente, el grafo de dependencias del repositorio y la ejecución de las pruebas.</td><td>Equipo Phoenix (análisis asistido por Claude Code)</td></tr></tbody>
+</table>
+
+<h3>Resumen ejecutivo</h3>
+<p>CarteraX Phoenix es una aplicación de escritorio, sin servidor, para que un ejecutivo de cobranza gestione su cartera mensual: importa el archivo del banco, prioriza a quién llamar, registra cada gestión y genera reportes. Las llamadas se hacen desde un teléfono Android con la aplicación Phoenix Mobile, que el escritorio controla por la red Wi-Fi local. Todos los datos quedan en una base SQLite en el computador del ejecutivo.</p>
+<p>El análisis confirma que el núcleo del sistema es funcional. El proyecto compila sin errores y las <b>96 pruebas automáticas terminan sin fallas</b> (37 del cargador de archivos, 58 de reglas de negocio y 1 de importación segura). La interfaz se verificó con 16 capturas generadas sobre la aplicación real. La aplicación Android se construye con GitHub Actions.</p>
+<div class="resumen">
+  <div><b>51</b><span>canales IPC entre interfaz y lógica</span></div>
+  <div><b>10</b><span>servicios de negocio</span></div>
+  <div><b>17</b><span>tablas SQLite (esquema v4)</span></div>
+  <div><b>96/96</b><span>pruebas automáticas correctas</span></div>
+</div>
+<p>Los principales riesgos están en el enlace con el teléfono: el servidor HTTP de Phoenix Mobile no autentica ni cifra, de modo que cualquier equipo de la misma red Wi-Fi podría ordenar llamadas. Las recomendaciones están en la sección 9.</p>
+
+<div class="indice">
+<h3>Contenido</h3>
+<ol>
+  <li>1. Introducción<ol><li>1.1 Propósito · 1.2 Alcance · 1.3 Método · 1.4 El modelo 4+1 · 1.5 Referencias</li></ol></li>
+  <li>2. Descripción general del sistema<ol><li>2.1 Contexto · 2.2 Requisitos con impacto arquitectónico · 2.3 Tecnologías</li></ol></li>
+  <li>3. Vista de escenarios (+1)</li>
+  <li>4. Vista lógica</li>
+  <li>5. Vista de desarrollo</li>
+  <li>6. Vista de procesos</li>
+  <li>7. Vista física</li>
+  <li>8. Estado funcional verificado</li>
+  <li>9. Hallazgos y recomendaciones</li>
+  <li>Anexos: A. Canales IPC · B. Modelo de datos · C. Capturas · D. Archivos de imagen</li>
+</ol>
+</div>
+
+<!-- ============================ 1 ============================ -->
+<h2>1. Introducción</h2>
+<h3>1.1 Propósito</h3>
+<p>Este documento describe la arquitectura de CarteraX Phoenix tal como está implementada en el repositorio, y distingue lo que está verificado como funcional de lo que está pendiente, es heredado o no se pudo comprobar. Sirve al equipo de desarrollo para mantener el sistema, a quien lo evalúe para entender las decisiones de diseño y a quien lo despliegue para saber qué se instala y dónde quedan los datos.</p>
+
+<h3>1.2 Alcance</h3>
+<p>Cubre la aplicación de escritorio (<code>src/</code>), la aplicación Android (<code>movil/android/</code>), las pruebas (<code>pruebas/</code>), los scripts de soporte (<code>scripts/</code>) y la integración continua (<code>.github/workflows/</code>). La carpeta <code>compatibilidad/main-anterior/</code> contiene una versión anterior que no se empaqueta. Sólo se trata como hallazgo, en la sección 9.</p>
+
+<h3>1.3 Método</h3>
+<ul>
+  <li><b>Lectura del código fuente</b> de los módulos principales: arranque, puente IPC, servicios, importación, cliente móvil y aplicación Android.</li>
+  <li><b>Grafo de conocimiento del repositorio</b> generado con graphify: 1 475 nodos, 2 695 relaciones y 78 comunidades. Se usó para identificar los módulos centrales y las dependencias entre capas.</li>
+  <li><b>Compilación y pruebas</b> el 30-10-2026 con Node.js 22.23.4: <code>npm run prueba</code> compila con <code>tsc</code> y ejecuta las tres suites. Resultado: 96 pruebas correctas, 0 fallas.</li>
+  <li><b>Evidencia visual</b>: capturas de la interfaz v0.4 generadas con <code>scripts/capturar-pantallas.js</code> sobre la aplicación real y una base temporal.</li>
+</ul>
+
+<h3>1.4 El modelo de vistas 4+1</h3>
+<p>El modelo propuesto por Philippe Kruchten (1995) describe un sistema con cuatro vistas complementarias, cada una dirigida a distintos interesados, más una quinta vista de escenarios que las une y las valida.</p>
+<table>
+  <thead><tr><th style="width:19%">Vista</th><th>Qué responde</th><th style="width:20%">Interesados</th><th style="width:22%">En este documento</th></tr></thead>
+  <tbody>
+    <tr><td><b>Lógica</b></td><td>Qué hace el sistema y cómo se reparte la funcionalidad en capas y módulos.</td><td>Analistas, usuarios</td><td>Sección 4, figura 3</td></tr>
+    <tr><td><b>Desarrollo</b></td><td>Cómo se organiza el código, cómo se construye y cómo se prueba.</td><td>Programadores</td><td>Sección 5, figura 4</td></tr>
+    <tr><td><b>Procesos</b></td><td>Qué procesos e hilos existen, cómo se comunican y cómo se comportan en el tiempo.</td><td>Integradores</td><td>Sección 6, figuras 5 a 7</td></tr>
+    <tr><td><b>Física</b></td><td>En qué equipos se ejecuta cada componente y por qué red se comunican.</td><td>Soporte, despliegue</td><td>Sección 7, figura 8</td></tr>
+    <tr><td><b>Escenarios (+1)</b></td><td>Casos de uso que recorren las cuatro vistas y validan la arquitectura.</td><td>Todos</td><td>Sección 3, figura 2</td></tr>
+  </tbody>
+</table>
+
+<h3>1.5 Referencias</h3>
+<ol>
+  <li>Kruchten, P. (1995). <i>Architectural Blueprints — The "4+1" View Model of Software Architecture</i>. IEEE Software, 12(6), 42–50.</li>
+  <li><code>README.md</code>: instalación, flujo de trabajo, estados de cobranza y prioridad.</li>
+  <li><code>PRODUCT.md</code> y <code>DESIGN.md</code>: definición de producto y sistema de diseño v0.4.</li>
+  <li><code>movil/android/README_ANDROID.md</code>: protocolo HTTP de Phoenix Mobile.</li>
+  <li>ERS v2 del proyecto. Los identificadores RF y RNF citados provienen de los comentarios del código; el documento de trazabilidad que menciona el README no está en el repositorio.</li>
+</ol>
+
+<!-- ============================ 2 ============================ -->
+<h2>2. Descripción general del sistema</h2>
+<h3>2.1 Contexto</h3>
+<figure>
+  <!--SVG:contexto_sistema-->
+  <figcaption><b>Figura 1.</b> Contexto del sistema. CarteraX es el único punto de trabajo del ejecutivo. El teléfono es un periférico controlado por HTTP en la red local, y la base de datos vive en el mismo computador.</figcaption>
+</figure>
+
+<h3>2.2 Requisitos con impacto arquitectónico</h3>
+<table>
+  <thead><tr><th style="width:15%">Requisito</th><th>Exigencia</th><th>Decisión arquitectónica que la cumple</th></tr></thead>
+  <tbody>
+    <tr><td>RNF-11, RNF-14</td><td>Funcionar sin internet ni servidor.</td><td>Aplicación de escritorio con SQLite local. La única comunicación de red es con el teléfono, dentro de la Wi-Fi local.</td></tr>
+    <tr><td>RF-01</td><td>Toda operación sobre la cartera exige sesión.</td><td><code>rutas.ts</code> llama a <code>exigirSesion()</code> antes de cada operación.</td></tr>
+    <tr><td>RNF-04</td><td>Contraseñas protegidas.</td><td>scrypt con sal aleatoria y comparación en tiempo constante. Bloqueo de 5 minutos tras 5 intentos fallidos.</td></tr>
+    <tr><td>RNF-07</td><td>Cierre de sesión por inactividad.</td><td>Temporizador en el renderer (<code>app.ts</code>), que no corta una cola en marcha.</td></tr>
+    <tr><td>RF-16</td><td>Aislamiento entre ejecutivos.</td><td>Cada consulta se filtra por usuario y mes de la sesión. Hay una prueba específica para esto.</td></tr>
+    <tr><td>RF-07 a RF-15</td><td>Importar la cartera mensual del banco.</td><td>ETL en <code>src/importacion</code> con vista previa, validación de RUT, huella SHA-256 y una transacción única.</td></tr>
+    <tr><td>RF-30 a RF-32</td><td>Cola automática de llamadas.</td><td><code>servicioColaLlamadas</code> y protocolo HTTP con Phoenix Mobile.</td></tr>
+    <tr><td>RNF-03</td><td>Identidad naranja y blanco.</td><td>Tokens de diseño en <code>styles.css</code> y <code>colors.xml</code> (ver <code>DESIGN.md</code>).</td></tr>
+  </tbody>
+</table>
+
+<h3>2.3 Tecnologías</h3>
+<table>
+  <thead><tr><th style="width:28%">Componente</th><th style="width:22%">Tecnología</th><th>Uso</th></tr></thead>
+  <tbody>
+    <tr><td>Contenedor de escritorio</td><td>Electron 31</td><td>Ventana Chromium y proceso Node.js. Multiplataforma.</td></tr>
+    <tr><td>Lenguaje</td><td>TypeScript 5.5</td><td>Todo el escritorio; compila a <code>dist/</code> con <code>tsc</code>.</td></tr>
+    <tr><td>Persistencia</td><td>better-sqlite3 11</td><td>SQLite embebido, acceso síncrono y transacciones.</td></tr>
+    <tr><td>Hojas de cálculo</td><td>xlsx (SheetJS) 0.18.5</td><td>Lectura de Excel y exportación de reportes.</td></tr>
+    <tr><td>Empaquetado</td><td>electron-builder 26</td><td>NSIS y portable (Windows), dmg (macOS), AppImage y deb (Linux).</td></tr>
+    <tr><td>Aplicación móvil</td><td>Kotlin, Android SDK 34 (mínimo 26)</td><td>Phoenix Mobile: servidor HTTP y llamadas.</td></tr>
+    <tr><td>Integración continua</td><td>GitHub Actions + Gradle</td><td>Construcción de instaladores y APK; publicación al crear un tag.</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================ 3 ============================ -->
+<h2>3. Vista de escenarios (+1)</h2>
+<p>La vista de escenarios reúne los casos de uso que el sistema implementa. Cada uno recorre las demás vistas: empieza en una pantalla (vista lógica, capa de presentación), cruza el puente IPC hasta un servicio, termina en SQLite o en el teléfono (procesos y física) y está respaldado por módulos y pruebas concretos (desarrollo).</p>
+<figure>
+  <!--SVG:escenarios_casos_de_uso-->
+  <figcaption><b>Figura 2.</b> Diagrama de casos de uso. En naranja, los dos casos que involucran a Phoenix Mobile como actor externo.</figcaption>
+</figure>
+
+<table>
+  <thead><tr><th style="width:8%">ID</th><th style="width:20%">Caso de uso</th><th>Descripción</th><th style="width:24%">Implementación</th><th style="width:14%">Estado</th></tr></thead>
+  <tbody>
+    <tr><td>CU-01</td><td>Iniciar sesión y elegir mes</td><td>Valida credenciales, bloquea tras 5 intentos, genera los cierres de meses terminados y fija el mes de trabajo.</td><td><code>servicioAuth</code>, <code>servicioPeriodos</code>, <code>app.ts</code></td><td class="ok">Verificado (6 pruebas)</td></tr>
+    <tr><td>CU-02</td><td>Importar cartera mensual</td><td>Excel o CSV con vista previa, revisión de observaciones y carga al mes elegido, sin pisar estados ni gestiones.</td><td><code>importacion/*</code>, <code>vista-importar</code></td><td class="ok">Verificado (37 + 5 + 1 pruebas)</td></tr>
+    <tr><td>CU-03</td><td>Consultar dashboard y alertas</td><td>Deuda, recuperado, meta, franja por estado, tramos, actividad y alertas.</td><td><code>servicioDashboard</code>, <code>vista-dashboard</code>, <code>graficos</code></td><td class="ok">Verificado (prueba RF-22)</td></tr>
+    <tr><td>CU-04</td><td>Buscar y gestionar cliente</td><td>Filtros, orden por prioridad, ficha, registro de gestión, compromiso o abono, y cambio masivo.</td><td><code>servicioCartera</code>, <code>vista-clientes</code></td><td class="ok">Verificado (15 pruebas)</td></tr>
+    <tr><td>CU-05</td><td>Ejecutar cola de llamadas</td><td>Llama por prioridad, espera el resultado, prueba otros teléfonos y registra motivos y duración.</td><td><code>servicioColaLlamadas</code>, <code>clienteMovil</code>, <code>vista-cola</code></td><td class="ok">Verificado (12 pruebas, teléfono simulado)</td></tr>
+    <tr><td>CU-06</td><td>Llamar manualmente</td><td>Llamada a un número desde la ficha o la vista Teléfono, con seguimiento y corrección posterior.</td><td><code>servicioMovil</code>, <code>vista-telefono</code></td><td class="parcial">Operativo; sin prueba propia</td></tr>
+    <tr><td>CU-07</td><td>Atender recordatorios</td><td>Agenda de seguimiento, aviso único, posponer y resolver.</td><td><code>servicioRecordatorios</code>, <code>vista-recordatorios</code></td><td class="ok">Verificado (8 pruebas)</td></tr>
+    <tr><td>CU-08</td><td>Generar y descargar reportes</td><td>Reporte congelado del mes, cierre automático y descarga en Excel, PDF o CSV.</td><td><code>servicioReportes</code>, <code>servicioExportacion</code></td><td class="ok">Verificado (6 pruebas)</td></tr>
+    <tr><td>CU-09</td><td>Configurar y respaldar</td><td>Metas, contraseña, crear respaldo y restaurar con reinicio.</td><td><code>servicioConfiguracion</code>, <code>manejadoresIpc</code></td><td class="parcial">Verificado salvo la restauración</td></tr>
+  </tbody>
+</table>
+
+<h3>3.1 Escenario principal: jornada del ejecutivo</h3>
+<ol>
+  <li>Ingresa con su correo y contraseña. Si terminó un mes, el sistema guarda su cierre automáticamente.</li>
+  <li>Importa el Excel del banco para el mes en curso, revisa las filas con observaciones y confirma la carga.</li>
+  <li>En el dashboard ve la deuda del mes por estado y las alertas: compromisos vencidos y prioritarios sin gestión.</li>
+  <li>En Clientes filtra por prioridad, selecciona un grupo y lo envía a la cola.</li>
+  <li>Inicia la cola. Phoenix Mobile llama a cada cliente y, cuando contesta, el ejecutivo registra el resultado y la cola continúa.</li>
+  <li>Al cerrar la quincena guarda un reporte y lo descarga en PDF.</li>
+</ol>
+<div class="capturas">
+  <figure><img src="../capturas/diseno/v0.4/claro/01_dashboard.png"><figcaption><b>Captura 1.</b> Dashboard (CU-03).</figcaption></figure>
+  <figure><img src="../capturas/diseno/v0.4/claro/05_clientes.png"><figcaption><b>Captura 2.</b> Clientes y filtros (CU-04).</figcaption></figure>
+  <figure><img src="../capturas/diseno/v0.4/claro/10_cola_llamando_motivos.png"><figcaption><b>Captura 3.</b> Cola llamando, con motivos (CU-05).</figcaption></figure>
+  <figure><img src="../capturas/diseno/v0.4/claro/07_importar_validacion.png"><figcaption><b>Captura 4.</b> Revisión de la importación (CU-02).</figcaption></figure>
+</div>
+
+<!-- ============================ 4 ============================ -->
+<h2>4. Vista lógica</h2>
+<p>El escritorio sigue una arquitectura en capas estricta. La interfaz no accede a datos ni a la red: todo pasa por un único método, <code>phoenixAPI.invocar(canal, …)</code>, hacia una tabla de 51 canales. Esa tabla (<code>rutas.ts</code>) no depende de Electron, de modo que toda la lógica se prueba con Node sin abrir una ventana.</p>
+<figure>
+  <!--SVG:logica_capas_y_modulos-->
+  <figcaption><b>Figura 3.</b> Capas lógicas y sus módulos. En naranja, el punto de entrada (<code>api.ts</code>, <code>rutas.ts</code>) y la ruta hacia el teléfono (<code>servicioColaLlamadas</code>, <code>servicioMovil</code>, <code>clienteMovil</code>).</figcaption>
+</figure>
+
+<h3>4.1 Responsabilidades por capa</h3>
+<table>
+  <thead><tr><th style="width:18%">Capa</th><th style="width:26%">Ubicación</th><th>Responsabilidad</th></tr></thead>
+  <tbody>
+    <tr><td>Presentación</td><td><code>src/renderer/</code></td><td>Una vista por pantalla y <code>app.ts</code>, que coordina sesión, menú, mes de trabajo e inactividad. Utilidades de interfaz, gráficos SVG y capa de movimiento.</td></tr>
+    <tr><td>Puente IPC</td><td><code>src/preload.ts</code>, <code>src/ipc/</code></td><td>Lista blanca de prefijos de canal, registro en <code>ipcMain</code>, envoltura de errores como <code>{ok, error}</code>, y operaciones de sistema: diálogos, PDF y respaldo.</td></tr>
+    <tr><td>Servicios</td><td><code>src/servicios/</code></td><td>Reglas de negocio por tema (tabla 4.2). Reciben la conexión y un contexto <code>{usuarioId, periodoId}</code>.</td></tr>
+    <tr><td>Dominio e importación</td><td><code>src/dominio/</code>, <code>src/importacion/</code>, <code>src/movil/</code></td><td>Catálogo de 12 estados, score de prioridad, ETL de archivos y cliente HTTP del teléfono.</td></tr>
+    <tr><td>Datos</td><td><code>src/db/</code></td><td>Conexión, esquema de 17 tablas, migraciones idempotentes (versión 4) y configuración clave/valor.</td></tr>
+  </tbody>
+</table>
+
+<h3>4.2 Servicios de negocio</h3>
+<table>
+  <thead><tr><th style="width:24%">Servicio</th><th>Responsabilidad</th><th style="width:36%">Funciones principales</th></tr></thead>
+  <tbody>
+    <tr><td><code>servicioAuth</code></td><td>Usuarios, contraseñas, bloqueo y registro de sesiones.</td><td><code>iniciarSesion</code>, <code>cambiarPassword</code>, <code>adoptarCarterasLegado</code></td></tr>
+    <tr><td><code>servicioPeriodos</code></td><td>Meses de trabajo y cartera de cada mes.</td><td><code>asegurarCartera</code>, <code>listarPeriodos</code>, <code>periodoPorDefecto</code></td></tr>
+    <tr><td><code>servicioCartera</code></td><td>Listado, filtros, ficha y registro de gestiones.</td><td><code>listarClientes</code>, <code>detalleCliente</code>, <code>registrarGestion</code></td></tr>
+    <tr><td><code>servicioDashboard</code></td><td>Indicadores del mes.</td><td><code>obtenerDashboard</code></td></tr>
+    <tr><td><code>servicioReportes</code></td><td>Reportes congelados y cierres mensuales.</td><td><code>generarReporte</code>, <code>generarCierresPendientes</code></td></tr>
+    <tr><td><code>servicioExportacion</code></td><td>Excel, CSV y HTML para PDF.</td><td><code>excelReporte</code>, <code>archivoClientes</code>, <code>htmlReporte</code></td></tr>
+    <tr><td><code>servicioColaLlamadas</code></td><td>Máquina de estados de la cola automática.</td><td><code>iniciarCola</code>, <code>actualizarCola</code>, <code>registrarResultado</code></td></tr>
+    <tr><td><code>servicioMovil</code></td><td>IP del teléfono, llamadas manuales y su seguimiento.</td><td><code>probarMovil</code>, <code>llamar</code>, <code>corregirLlamada</code></td></tr>
+    <tr><td><code>servicioRecordatorios</code></td><td>Agenda de vuelta de gestión.</td><td><code>listarRecordatorios</code>, <code>recordatoriosPorAvisar</code></td></tr>
+    <tr><td><code>servicioConfiguracion</code></td><td>Metas y parámetros validados.</td><td><code>leerConfigApp</code>, <code>guardarConfigApp</code></td></tr>
+  </tbody>
+</table>
+
+<h3>4.3 Reglas de dominio</h3>
+<p><b>Estados de cobranza.</b> Hay 12 estados definidos en un solo lugar (<code>src/dominio/estados.ts</code>): Sin gestionar, En cola, Contactado, No contesta, Notificado, Compromiso de pago, Abono parcial, Pagado, No pagado, Alerta, Inubicable y No contactar. «En cola» es el que alimenta la cola automática.</p>
+<p><b>Prioridad.</b> Es un score de 0 a 100 (<code>src/dominio/prioridad.ts</code>) que suma la deuda relativa dentro de la cartera (40), los días de mora (25), el estado (20) y los días sin gestión (15). Los casos cerrados valen 0. Ordena la cola y el listado por defecto.</p>
+
+<!-- ============================ 5 ============================ -->
+<h2>5. Vista de desarrollo</h2>
+<p>El código se organiza por capa y luego por tema. Los nombres de módulos, funciones y tablas están en español y siguen el vocabulario del negocio. Los tipos compartidos entre interfaz y lógica viven en un único archivo de contratos (<code>src/tipos/contratos.d.ts</code>, espacio de nombres <code>Phoenix</code>).</p>
+<figure>
+  <!--SVG:desarrollo_paquetes_y_construccion-->
+  <figcaption><b>Figura 4.</b> Paquetes del repositorio, con su tamaño en líneas, y la cadena de construcción y distribución. Los paquetes en naranja forman la aplicación de escritorio que se empaqueta.</figcaption>
+</figure>
+
+<h3>5.1 Ubicación de los componentes</h3>
+<table>
+  <thead><tr><th style="width:32%">Ruta</th><th>Contenido</th></tr></thead>
+  <tbody>
+    <tr><td><code>src/main.ts</code>, <code>src/preload.ts</code></td><td>Proceso principal (ventana, menú, instancia única) y puente <code>window.phoenixAPI</code> con la lista blanca de canales.</td></tr>
+    <tr><td><code>src/ipc/rutas.ts</code></td><td>Tabla canal → servicio. Sin dependencia de Electron.</td></tr>
+    <tr><td><code>src/ipc/manejadoresIpc.ts</code></td><td>Registro en <code>ipcMain</code>, diálogos, generación de PDF y restauración.</td></tr>
+    <tr><td><code>src/servicios/</code></td><td>Los 10 servicios de negocio, más utilidades de fechas.</td></tr>
+    <tr><td><code>src/importacion/</code></td><td>Lector, mapeo, normalizador, validador, clasificador, cálculos, previsualizador e importador.</td></tr>
+    <tr><td><code>src/movil/clienteMovil.ts</code></td><td>Protocolo HTTP con Phoenix Mobile: <code>/ping</code>, <code>/call</code>, <code>/call-status</code> y <code>/call-status/ack</code>.</td></tr>
+    <tr><td><code>src/db/</code></td><td><code>schema.sql</code>, <code>migraciones.ts</code>, <code>conexion.ts</code> y <code>configuracion.ts</code>.</td></tr>
+    <tr><td><code>src/renderer/</code></td><td><code>index.html</code>, <code>styles.css</code>, 8 vistas, <code>app.ts</code>, <code>api.ts</code> y utilidades.</td></tr>
+    <tr><td><code>movil/android/…/phone/</code></td><td><code>MainActivity.kt</code> (527 líneas) y <code>ServidorPhoenix.kt</code> (117 líneas).</td></tr>
+    <tr><td><code>pruebas/</code></td><td><code>cargador.prueba.js</code>, <code>servicios.prueba.js</code> e <code>importacion-segura.prueba.js</code>.</td></tr>
+    <tr><td><code>scripts/</code></td><td>Copia de recursos, capturas, simulador del teléfono, generación de ejemplos e íconos.</td></tr>
+  </tbody>
+</table>
+
+<h3>5.2 Construcción y pruebas</h3>
+<table>
+  <thead><tr><th style="width:32%">Comando</th><th>Efecto</th></tr></thead>
+  <tbody>
+    <tr><td><code>npm install</code></td><td>Instala dependencias y recompila better-sqlite3 para Electron (<code>postinstall</code>).</td></tr>
+    <tr><td><code>npm start</code></td><td>Compila con <code>tsc</code>, copia los recursos a <code>dist/</code> y abre la aplicación.</td></tr>
+    <tr><td><code>npm run prueba</code></td><td>Compila y ejecuta las 3 suites (96 pruebas). Las de negocio corren dentro de Electron para usar el mismo SQLite nativo.</td></tr>
+    <tr><td><code>npm run simulador-movil</code></td><td>Simula Phoenix Mobile en <code>127.0.0.1</code>, con opciones para contesta, no contesta y sin permiso.</td></tr>
+    <tr><td><code>npm run dist:win</code> (y <code>mac</code>, <code>linux</code>)</td><td>Genera los instaladores en <code>release/</code>.</td></tr>
+    <tr><td><code>./gradlew assembleDebug</code></td><td>Compila el APK de Phoenix Mobile (requiere el SDK de Android y JDK 17).</td></tr>
+  </tbody>
+</table>
+<p><b>Decisión clave de diseño:</b> separar <code>rutas.ts</code> (lógica de canales) de <code>manejadoresIpc.ts</code> (dependencias de Electron) mediante la interfaz <code>Plataforma</code>. Esto permite probar los 51 canales con Node y sustituir diálogos y PDF por implementaciones de prueba.</p>
+
+<!-- ============================ 6 ============================ -->
+<h2>6. Vista de procesos</h2>
+<p>En operación conviven tres procesos: el renderer (Chromium), el proceso principal de Electron (Node.js) y la aplicación Android. El renderer sólo se comunica con el proceso principal por IPC asíncrono. El proceso principal es el único que toca la base de datos y la red.</p>
+<figure>
+  <!--SVG:procesos_e_hilos-->
+  <figcaption><b>Figura 5.</b> Procesos, hilos y canales de comunicación.</figcaption>
+</figure>
+
+<h3>6.1 Concurrencia y estado</h3>
+<ul>
+  <li><b>Proceso principal de un solo hilo.</b> better-sqlite3 es síncrono: cada consulta bloquea el proceso principal mientras dura. Las importaciones se hacen en una sola transacción, que es rápida y atómica, pero un archivo muy grande congela la interfaz durante la carga.</li>
+  <li><b>Estado en memoria.</b> La sesión, el estado de la cola y el seguimiento de una llamada manual viven en memoria del proceso principal. Al cerrar la sesión o cambiar de mes, la cola se detiene.</li>
+  <li><b>Sondeo, no notificación.</b> El teléfono nunca avisa al escritorio. El renderer consulta cada 1,5 s y cada consulta se traduce en una petición <code>GET /call-status</code>.</li>
+  <li><b>Android.</b> <code>ServidorPhoenix</code> acepta conexiones en un pool de hilos y delega en el hilo de interfaz (<code>runOnUiThread</code>), donde <code>MainActivity</code> enruta, inicia la llamada con <code>ACTION_CALL</code> y detecta su fin con <code>PhoneStateListener</code> y <code>CallLog</code>.</li>
+</ul>
+
+<h3>6.2 Secuencia: cola de llamadas</h3>
+<figure>
+  <!--SVG:procesos_secuencia_cola_llamadas-->
+  <figcaption><b>Figura 6.</b> Secuencia de la cola de llamadas. El ack se envía dos veces a propósito: al iniciar, para limpiar un estado viejo del teléfono, y al terminar cada llamada, para que el teléfono deje de informarla.</figcaption>
+</figure>
+
+<h3>6.3 Actividad: importación de cartera</h3>
+<figure>
+  <!--SVG:procesos_actividad_importacion-->
+  <figcaption><b>Figura 7.</b> Flujo de importación. La huella SHA-256 impide cargar dos veces el mismo archivo en el mismo mes. La protección por RUT se valida también en la capa de negocio, no sólo en la vista previa.</figcaption>
+</figure>
+
+<!-- ============================ 7 ============================ -->
+<h2>7. Vista física</h2>
+<figure>
+  <!--SVG:fisica_despliegue-->
+  <figcaption><b>Figura 8.</b> Despliegue. Dos dispositivos en la misma red Wi-Fi. GitHub sólo participa en la construcción, no en la operación.</figcaption>
+</figure>
+<table>
+  <thead><tr><th style="width:20%">Nodo</th><th style="width:30%">Software</th><th style="width:25%">Datos</th><th>Comunicación</th></tr></thead>
+  <tbody>
+    <tr><td>PC del ejecutivo</td><td>CarteraX (Electron 31, asar); better-sqlite3 desempaquetado</td><td><code>%APPDATA%\CarteraX\carterax_fusion.db</code></td><td>Cliente HTTP hacia el teléfono</td></tr>
+    <tr><td>Teléfono Android</td><td>PhoenixMobile.apk 0.3.0 (Android 8.0 o superior)</td><td>Sin datos persistentes de la cartera</td><td>Servidor TCP en el puerto 8765; llamadas por la red móvil</td></tr>
+    <tr><td>GitHub</td><td>Actions (Windows, macOS, Linux y Ubuntu para Android)</td><td>Artefactos y Releases</td><td>Sólo descarga de instaladores</td></tr>
+  </tbody>
+</table>
+<p><b>Instalación.</b> El instalador NSIS es por usuario, permite elegir la carpeta y conserva los datos al desinstalar (<code>deleteAppDataOnUninstall: false</code>). Los instaladores no están firmados, por lo que Windows muestra una advertencia de editor desconocido. El teléfono y el PC deben estar en la misma red, y el ejecutivo escribe la IP del teléfono en la vista Teléfono.</p>
+
+<!-- ============================ 8 ============================ -->
+<h2>8. Estado funcional verificado</h2>
+<p>La siguiente matriz resume, por funcionalidad, dónde está implementada y qué evidencia la respalda. «Verificado» significa que existe una prueba automática que pasó el 30-10-2026. Todo el código TypeScript compila con <code>tsc</code> sin errores.</p>
+<table class="denso">
+  <thead><tr><th style="width:21%">Funcionalidad</th><th style="width:29%">Ubicación</th><th>Evidencia</th><th style="width:15%">Estado</th></tr></thead>
+  <tbody>
+    <tr><td>Sesión, bloqueo y migraciones</td><td><code>servicioAuth</code>, <code>db/migraciones</code></td><td>6 pruebas «Base de datos y sesión»</td><td class="ok">Verificado</td></tr>
+    <tr><td>Lectura y normalización de archivos</td><td><code>src/importacion/*</code></td><td>37 pruebas del cargador (números, fechas, RUT, CSV, mapeo, ejemplos, revisión)</td><td class="ok">Verificado</td></tr>
+    <tr><td>Importación por mes y duplicados</td><td><code>importador.ts</code></td><td>5 pruebas + 1 de importación segura</td><td class="ok">Verificado</td></tr>
+    <tr><td>Búsqueda, filtros y prioridad</td><td><code>servicioCartera</code>, <code>dominio/prioridad</code></td><td>6 pruebas RF-17</td><td class="ok">Verificado</td></tr>
+    <tr><td>Registro de gestiones</td><td><code>servicioCartera.registrarGestion</code></td><td>9 pruebas RF-18 y RF-33</td><td class="ok">Verificado</td></tr>
+    <tr><td>Recordatorios</td><td><code>servicioRecordatorios</code></td><td>8 pruebas v0.3.1</td><td class="ok">Verificado</td></tr>
+    <tr><td>Aislamiento entre ejecutivos</td><td>filtros por <code>usuarioId</code></td><td>1 prueba RF-16</td><td class="ok">Verificado</td></tr>
+    <tr><td>Dashboard</td><td><code>servicioDashboard</code></td><td>1 prueba RF-22 + agenda y llamadas por motivo</td><td class="ok">Verificado</td></tr>
+    <tr><td>Cola de llamadas</td><td><code>servicioColaLlamadas</code>, <code>clienteMovil</code></td><td>12 pruebas RF-30 a RF-32, con teléfono simulado</td><td class="ok">Verificado</td></tr>
+    <tr><td>Reportes y exportación</td><td><code>servicioReportes</code>, <code>servicioExportacion</code></td><td>6 pruebas RF-25 (Excel, PDF, CSV)</td><td class="ok">Verificado</td></tr>
+    <tr><td>Configuración y crear respaldo</td><td><code>servicioConfiguracion</code>, <code>rutas.ts</code></td><td>3 pruebas</td><td class="ok">Verificado</td></tr>
+    <tr><td>Restaurar respaldo</td><td><code>manejadoresIpc.ts</code></td><td>Valida tablas y reinicia; sin prueba automática</td><td class="parcial">No probado</td></tr>
+    <tr><td>Llamada manual</td><td><code>servicioMovil</code>, <code>vista-telefono</code></td><td>Captura 8; sin prueba propia</td><td class="parcial">Parcial</td></tr>
+    <tr><td>Interfaz de escritorio</td><td><code>src/renderer/*</code></td><td>16 capturas v0.4 generadas con la aplicación real, en tema claro y oscuro</td><td class="ok">Verificada visualmente</td></tr>
+    <tr><td>Phoenix Mobile (APK)</td><td><code>movil/android</code></td><td>Se compila en GitHub Actions</td><td class="gris">Compilación en CI</td></tr>
+    <tr><td>Instaladores</td><td><code>electron-builder</code>, <code>instaladores.yml</code></td><td>Configuración en <code>electron-builder</code> e <code>instaladores.yml</code></td><td class="gris">Configurado</td></tr>
+    <tr><td>Código heredado</td><td><code>compatibilidad/main-anterior</code>, <code>movil/pc-prueba-python</code></td><td>Servidor anterior (<code>npm run servidor</code>) y prototipo Python reemplazado por la vista Teléfono; fuera del empaquetado</td><td class="gris">Heredado</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================ 9 ============================ -->
+<h2>9. Hallazgos y recomendaciones</h2>
+<p>Los hallazgos están ordenados por prioridad. Ninguno impide el uso actual del sistema, pero los dos primeros conviene resolverlos antes de usarlo con datos reales en redes compartidas.</p>
+<table>
+  <thead><tr><th style="width:5%">#</th><th style="width:30%">Hallazgo</th><th>Riesgo</th><th style="width:32%">Recomendación</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>El servidor HTTP de Phoenix Mobile no autentica las peticiones.</td><td>Cualquier equipo de la misma Wi-Fi puede ordenar llamadas con <code>POST /call</code> o leer el estado de la llamada.</td><td>Emparejar escritorio y teléfono con un token compartido (por ejemplo, un código QR) y exigirlo en cada petición.</td></tr>
+    <tr><td>2</td><td>El tráfico con el teléfono va sin cifrar.</td><td>El número, el nombre y el RUT del cliente viajan en texto plano por la red local.</td><td>Enviar sólo el número, o cifrar el canal (TLS con certificado fijado durante el emparejamiento).</td></tr>
+    <tr><td>3</td><td>La credencial inicial está publicada en el README.</td><td>Una instalación nueva queda accesible con una contraseña conocida.</td><td>Obligar a cambiar la contraseña en el primer ingreso.</td></tr>
+    <tr><td>4</td><td><code>MainActivity</code> concentra enrutamiento HTTP, llamadas, permisos e interfaz (527 líneas; es el nodo más conectado del grafo, con 37 relaciones).</td><td>Cuesta mantenerla y probarla.</td><td>Separar un enrutador del protocolo y un gestor de llamadas, y dejar la actividad sólo para la interfaz.</td></tr>
+    <tr><td>5</td><td>El acceso a SQLite es síncrono en el proceso principal.</td><td>Un archivo de importación grande congela la ventana.</td><td>Mover la importación a un <code>worker_thread</code> o informar el progreso por partes.</td></tr>
+    <tr><td>6</td><td>Hay enlaces rotos en el README: <code>LEEME_INTEGRACION.md</code>, <code>docs/CAMBIOS.md</code>, <code>docs/TRAZABILIDAD_ERS.md</code> y <code>docs/capturas/dashboard.png</code>.</td><td>La documentación de cambios y la trazabilidad con el ERS no se pueden consultar.</td><td>Restaurar los archivos o actualizar los enlaces.</td></tr>
+    <tr><td>7</td><td><code>compatibilidad/main-anterior</code> duplica código: otra <code>MainActivity</code>, otros tipos y otros scripts.</td><td>Confusión y doble mantenimiento.</td><td>Archivarla en una rama o etiqueta y retirarla de la rama principal.</td></tr>
+    <tr><td>8</td><td>La ventana usa <code>sandbox: false</code> (con <code>contextIsolation</code> activo y sin <code>nodeIntegration</code>).</td><td>Defensa en profundidad menor ante un contenido malicioso en el renderer.</td><td>Evaluar activar <code>sandbox: true</code> y comprobar que el preload (<code>contextBridge</code>, <code>ipcRenderer</code>, <code>webUtils</code>) siga funcionando.</td></tr>
+    <tr><td>9</td><td>No hay pruebas automáticas de la interfaz ni de la aplicación Android.</td><td>Las regresiones visuales o del protocolo se detectan tarde.</td><td>Agregar pruebas de extremo a extremo con el simulador y pruebas instrumentadas en Android.</td></tr>
+    <tr><td>10</td><td>El estado de la cola sólo existe en memoria.</td><td>Si la aplicación se cierra a mitad de una llamada, la cola no se retoma al reabrir.</td><td>Persistir el estado mínimo de la cola y ofrecer retomarla.</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================ ANEXOS ============================ -->
+<h2>Anexo A. Catálogo de canales IPC</h2>
+<p>Los 51 canales que define <code>src/ipc/rutas.ts</code>. Todos, salvo los marcados con *, exigen una sesión iniciada.</p>
+<table>
+  <thead><tr><th style="width:18%">Grupo</th><th>Canales</th></tr></thead>
+  <tbody>
+    <tr><td>auth</td><td><code>login</code>*, <code>sesion</code>*, <code>logout</code>*, <code>cambiar-password</code></td></tr>
+    <tr><td>contexto / catálogo</td><td><code>contexto:obtener</code>, <code>contexto:cambiar-periodo</code>, <code>catalogo:estados</code>*</td></tr>
+    <tr><td>importacion</td><td><code>elegir</code>*, <code>previsualizar</code>*, <code>ejecutar</code>, <code>historial</code>, <code>exportar-observaciones</code></td></tr>
+    <tr><td>clientes</td><td><code>listar</code>, <code>opciones</code>, <code>detalle</code>, <code>gestionar</code>, <code>telefono</code>, <code>exportar</code></td></tr>
+    <tr><td>dashboard</td><td><code>obtener</code></td></tr>
+    <tr><td>reportes</td><td><code>listar</code>, <code>generar</code>, <code>obtener</code>, <code>eliminar</code>, <code>descargar</code></td></tr>
+    <tr><td>movil</td><td><code>obtener</code>*, <code>probar</code>*, <code>llamar</code>, <code>llamadas</code>, <code>seguimiento</code>, <code>terminar-llamada</code>, <code>descartar-seguimiento</code>*, <code>corregir-llamada</code></td></tr>
+    <tr><td>cola</td><td><code>estado</code>, <code>iniciar</code>, <code>actualizar</code>, <code>pausar</code>, <code>reanudar</code>, <code>detener</code>, <code>saltar</code>, <code>finalizar-llamada</code>, <code>corregir-intento</code>, <code>registrar-resultado</code></td></tr>
+    <tr><td>recordatorios</td><td><code>listar</code>, <code>avisar</code>, <code>posponer</code>, <code>resolver</code></td></tr>
+    <tr><td>config / respaldo</td><td><code>config:obtener</code>*, <code>config:guardar</code>, <code>respaldo:crear</code>, <code>respaldo:restaurar</code></td></tr>
+    <tr><td>sistema</td><td><code>mostrar-archivo</code>* (exige una ruta absoluta)</td></tr>
+  </tbody>
+</table>
+
+<h2>Anexo B. Modelo de datos</h2>
+<p>Las 17 tablas de <code>src/db/schema.sql</code>, agrupadas por tema. El esquema separa los datos estables del cliente (que se comparten entre meses) de su situación en cada cartera mensual.</p>
+<table>
+  <thead><tr><th style="width:18%">Tema</th><th style="width:34%">Tablas</th><th>Propósito</th></tr></thead>
+  <tbody>
+    <tr><td>Identidad</td><td><code>usuarios</code>, <code>sesiones_log</code></td><td>Ejecutivos, contraseñas scrypt e inicios y cierres de sesión.</td></tr>
+    <tr><td>Período</td><td><code>periodos</code>, <code>carteras</code>, <code>cartera_clientes</code></td><td>Mes de trabajo, cartera del ejecutivo en ese mes y estado de cobranza de cada cliente en ella.</td></tr>
+    <tr><td>Cliente</td><td><code>clientes</code>, <code>operaciones</code>, <code>telefonos</code>, <code>correos</code>, <code>direcciones</code>, <code>vehiculos</code></td><td>Datos del titular y de sus deudas (operación por mes) y medios de contacto.</td></tr>
+    <tr><td>Gestión</td><td><code>gestiones</code>, <code>recordatorios</code></td><td>Historial de cada contacto o llamada y agenda de vuelta.</td></tr>
+    <tr><td>Importación</td><td><code>importaciones</code>, <code>errores_importacion</code></td><td>Cada archivo cargado, con su huella SHA-256 y las filas con error.</td></tr>
+    <tr><td>Reportes</td><td><code>reportes_mensuales</code></td><td>Reportes y cierres congelados.</td></tr>
+    <tr><td>Sistema</td><td><code>configuracion</code></td><td>Parámetros clave/valor: metas, inactividad e IP del teléfono.</td></tr>
+  </tbody>
+</table>
+
+<h2>Anexo C. Capturas adicionales</h2>
+<div class="capturas">
+  <figure><img src="../capturas/diseno/v0.4/claro/00_login.png"><figcaption><b>Captura 5.</b> Inicio de sesión (CU-01).</figcaption></figure>
+  <figure><img src="../capturas/diseno/v0.4/claro/06_ficha_cliente.png"><figcaption><b>Captura 6.</b> Ficha del cliente (CU-04).</figcaption></figure>
+  <figure><img src="../capturas/diseno/v0.4/claro/04_recordatorios.png"><figcaption><b>Captura 7.</b> Panel de recordatorios (CU-07).</figcaption></figure>
+  <figure><img src="../capturas/diseno/v0.4/claro/13_telefono_llamadas.png"><figcaption><b>Captura 8.</b> Vista Teléfono y llamadas (CU-06).</figcaption></figure>
+  <figure><img src="../capturas/diseno/v0.4/claro/11_cola_resultado.png"><figcaption><b>Captura 9.</b> Registro del resultado en la cola (CU-05).</figcaption></figure>
+  <figure><img src="../capturas/diseno/v0.4/claro/14_ficha_completa.png"><figcaption><b>Captura 10.</b> Ficha completa con operaciones y contacto.</figcaption></figure>
+</div>
+
+<h2>Anexo D. Archivos de imagen</h2>
+<p>Los diagramas de este documento están en <code>docs/arquitectura/img/</code> en dos formatos: SVG (vectorial, editable) y PNG a doble resolución (<code>img/png/</code>), listos para presentaciones.</p>
+<table>
+  <thead><tr><th style="width:36%">Archivo</th><th>Vista</th></tr></thead>
+  <tbody>
+    <tr><td><code>contexto_sistema</code></td><td>Contexto del sistema</td></tr>
+    <tr><td><code>escenarios_casos_de_uso</code></td><td>Escenarios: casos de uso</td></tr>
+    <tr><td><code>logica_capas_y_modulos</code></td><td>Lógica: capas y módulos</td></tr>
+    <tr><td><code>desarrollo_paquetes_y_construccion</code></td><td>Desarrollo: paquetes y construcción</td></tr>
+    <tr><td><code>procesos_e_hilos</code></td><td>Procesos: procesos e hilos</td></tr>
+    <tr><td><code>procesos_secuencia_cola_llamadas</code></td><td>Procesos: secuencia de la cola de llamadas</td></tr>
+    <tr><td><code>procesos_actividad_importacion</code></td><td>Procesos: actividad de importación</td></tr>
+    <tr><td><code>fisica_despliegue</code></td><td>Física: despliegue</td></tr>
+  </tbody>
+</table>
+<p>Para regenerar el PDF y las imágenes PNG, después de editar <code>documento.html</code> o los SVG:</p>
+<p><code>npx electron docs/arquitectura/generar-documento.js</code></p>
+
+</body>
+</html>

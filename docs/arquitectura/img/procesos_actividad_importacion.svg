@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 300" role="img" aria-label="Flujo de importación: elegir archivo, previsualizar y validar, revisar observaciones, ejecutar la carga en una transacción y registrar el resultado; si ninguna fila tiene RUT válido la cartera no se modifica." font-family="Archivo, Segoe UI, sans-serif">
+  <defs>
+    <marker id="f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" fill="#515C77"/></marker>
+  </defs>
+  <rect x="0" y="0" width="1000" height="300" fill="#FFFFFF"/>
+  <g font-size="11.5" fill="#515C77">
+    <rect x="20" y="30" width="172" height="140" rx="8" fill="#EEF0F5" stroke="#515C77"/>
+    <text x="34" y="56" font-size="13.5" font-weight="700" fill="#16203A">1. Elegir archivo</text>
+    <text x="34" y="80">arrastrar o diálogo</text><text x="34" y="98">elegir el mes destino</text><text x="34" y="122" fill="#A9520F">vista-importar.ts</text>
+
+    <rect x="217" y="30" width="172" height="140" rx="8" fill="#FFFFFF" stroke="#16203A"/>
+    <text x="231" y="56" font-size="13.5" font-weight="700" fill="#16203A">2. Previsualizar</text>
+    <text x="231" y="80">CSV o Excel, separador</text><text x="231" y="98">y codificación</text><text x="231" y="116">mapeo de columnas</text><text x="231" y="134">RUT y dígito verificador</text><text x="231" y="156" fill="#A9520F">previsualizador.ts</text>
+
+    <rect x="414" y="30" width="172" height="140" rx="8" fill="#FFFFFF" stroke="#16203A"/>
+    <text x="428" y="56" font-size="13.5" font-weight="700" fill="#16203A">3. Revisar</text>
+    <text x="428" y="80">se cargan</text><text x="428" y="98">con observaciones</text><text x="428" y="116">no se cargan</text><text x="428" y="134">exportar observaciones</text><text x="428" y="156" fill="#A9520F">validador.ts</text>
+
+    <rect x="611" y="30" width="172" height="140" rx="8" fill="#FCEBDD" stroke="#DE762E" stroke-width="1.6"/>
+    <text x="625" y="56" font-size="13.5" font-weight="700" fill="#16203A">4. Ejecutar carga</text>
+    <text x="625" y="80">huella SHA-256</text><text x="625" y="98">una transacción</text><text x="625" y="116">alta o actualización</text><text x="625" y="134">sin pisar el estado</text><text x="625" y="156" fill="#A9520F">importador.ts</text>
+
+    <rect x="808" y="30" width="172" height="140" rx="8" fill="#EEF0F5" stroke="#515C77"/>
+    <text x="822" y="56" font-size="13.5" font-weight="700" fill="#16203A">5. Registrar</text>
+    <text x="822" y="80">importaciones</text><text x="822" y="98">errores_importacion</text><text x="822" y="116">pasa a ese mes</text><text x="822" y="156" fill="#A9520F">historial</text>
+  </g>
+  <g stroke="#515C77" stroke-width="1.4">
+    <line x1="192" y1="100" x2="214" y2="100" marker-end="url(#f)"/>
+    <line x1="389" y1="100" x2="411" y2="100" marker-end="url(#f)"/>
+    <line x1="586" y1="100" x2="608" y2="100" marker-end="url(#f)"/>
+    <line x1="783" y1="100" x2="805" y2="100" marker-end="url(#f)"/>
+  </g>
+  <rect x="520" y="214" width="360" height="56" rx="6" fill="#FFFFFF" stroke="#B3261E" stroke-dasharray="4 3"/>
+  <text x="700" y="237" text-anchor="middle" font-size="12" font-weight="700" fill="#B3261E">Protección: si ninguna fila tiene RUT válido</text>
+  <text x="700" y="256" text-anchor="middle" font-size="12" fill="#B3261E">se aborta y la cartera existente no cambia</text>
+  <line x1="697" y1="211" x2="697" y2="173" stroke="#B3261E" stroke-width="1.4" stroke-dasharray="4 3"/>
+</svg>

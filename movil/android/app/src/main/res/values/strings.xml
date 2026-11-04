@@ -1,3 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Phoenix Mobile</string>
+    <string name="subtitulo">Teléfono de llamadas para CarteraX</string>
+    <string name="titulo_conexion">Conexión con CarteraX</string>
+    <string name="ayuda_ip">Escribe esta dirección en CarteraX, sección Teléfono.</string>
+    <string name="copiar_ip">Copiar IP</string>
+    <string name="titulo_llamada">Llamada actual</string>
+    <string name="sin_llamada">Sin llamada</string>
+    <string name="esperando_orden">Cuando CarteraX envíe un número, la llamada se inicia sola con la SIM de este teléfono.</string>
+    <string name="volver_llamar">Volver a llamar</string>
+    <string name="titulo_permisos">Permisos</string>
+    <string name="perm_llamadas">Realizar llamadas</string>
+    <string name="perm_llamadas_ayuda">Obligatorio para marcar los números.</string>
+    <string name="perm_estado">Estado del teléfono</string>
+    <string name="perm_estado_ayuda">Permite avisar a CarteraX cuándo termina la llamada.</string>
+    <string name="perm_registro">Registro de llamadas</string>
+    <string name="perm_registro_ayuda">Permite saber si el cliente contestó y cuánto duró.</string>
+    <string name="conceder">Conceder</string>
+    <string name="titulo_ordenes">Últimas llamadas</string>
+    <string name="sin_ordenes">Todavía no se reciben llamadas en esta sesión.</string>
+    <string name="pantalla_encendida">Mantener la pantalla encendida</string>
+    <string name="pantalla_encendida_ayuda">Evita que el teléfono se suspenda mientras corre la cola de llamadas.</string>
+    <string name="pie">Mantén Phoenix Mobile abierta y en la misma red Wi‑Fi que el computador.</string>
 </resources>

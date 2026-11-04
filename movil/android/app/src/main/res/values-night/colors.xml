@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tema oscuro: mismos nombres que values/colors.xml (MainActivity los usa por id). -->
+<resources>
+    <color name="phoenix_naranja">#EC8A44</color>
+    <color name="phoenix_naranja_hondo">#FFA86B</color>
+    <color name="phoenix_naranja_suave">#3B2617</color>
+    <color name="tinta">#E8ECF6</color>
+    <color name="pizarra">#A3ADC8</color>
+    <color name="linea">#2A3352</color>
+    <color name="fondo">#0F1426</color>
+    <color name="superficie">#161D33</color>
+    <color name="superficie_2">#1C2440</color>
+    <color name="positivo">#4CBF78</color>
+    <color name="positivo_suave">#15301F</color>
+    <color name="alerta">#F2665B</color>
+    <color name="alerta_suave">#3B1D1B</color>
+    <color name="gris_estado">#7D8793</color>
+    <color name="grafito">#0A0F1E</color>
+</resources>

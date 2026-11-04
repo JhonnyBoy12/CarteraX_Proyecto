@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="CarteraX">
+  <!-- CarteraX: una X cuyo trazo ascendente es una flecha de recuperación.
+       Azul noche + naranja Phoenix Service. Fuente de todos los íconos
+       (scripts/generar-iconos.js). -->
+  <rect width="64" height="64" rx="15" fill="#16203A"/>
+  <path d="M20 20 L26 26 M38 38 L44 44" fill="none" stroke="#FFFFFF" stroke-width="6.5" stroke-linecap="round"/>
+  <path d="M20 44 L44 20 M31 20 H44 V33" fill="none" stroke="#DE762E" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

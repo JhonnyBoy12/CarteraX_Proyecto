@@ -11,8 +11,8 @@ android {
         applicationId = "cl.ersphoenix.phone"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "0.2.0-direct-call"
+        versionCode = 3
+        versionName = "0.3.0"
     }
 
     compileOptions {

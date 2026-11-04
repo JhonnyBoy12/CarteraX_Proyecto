@@ -1,6 +1,18 @@
--- =========================================================
--- CARTERAX - ESQUEMA NORMALIZADO DEL PROTOTIPO DE INTEGRACION
--- =========================================================
+-- =====================================================================
+-- CarteraX Phoenix — esquema SQLite local (v0.3.0)
+--
+-- Se ejecuta en cada arranque (CREATE ... IF NOT EXISTS). Las columnas
+-- agregadas en versiones posteriores a una tabla existente se crean en
+-- db/migraciones.ts, para que las bases antiguas se actualicen sin perder
+-- datos.
+--
+-- Modelo de trabajo:
+--   usuario (ejecutivo) ─┬─ cartera por período (mes) ── cartera_clientes
+--                        │        (estado de cobranza, compromiso, montos)
+--                        └─ reportes_mensuales (fotografías congeladas)
+--   clientes ── operaciones (por período), teléfonos, correos, direcciones,
+--               vehículos y gestiones (historial de cada caso)
+-- =====================================================================
 
 CREATE TABLE IF NOT EXISTS usuarios (
     id TEXT PRIMARY KEY,
@@ -10,10 +22,23 @@ CREATE TABLE IF NOT EXISTS usuarios (
     password_hash TEXT NOT NULL,
     activo INTEGER NOT NULL DEFAULT 1 CHECK (activo IN (0, 1)),
     ultimo_acceso TEXT,
+    intentos_fallidos INTEGER NOT NULL DEFAULT 0,
+    bloqueado_hasta TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- RF-06: inicio y cierre de cada sesión.
+CREATE TABLE IF NOT EXISTS sesiones_log (
+    id TEXT PRIMARY KEY,
+    usuario_id TEXT NOT NULL,
+    inicio TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fin TEXT,
+    motivo_fin TEXT,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
+
+-- Un período es un mes de gestión (id = 'AAAA-MM').
 CREATE TABLE IF NOT EXISTS periodos (
     id TEXT PRIMARY KEY,
     nombre TEXT NOT NULL,
@@ -121,6 +146,9 @@ CREATE TABLE IF NOT EXISTS carteras (
     UNIQUE (usuario_id, periodo_id)
 );
 
+-- Un cliente dentro de la cartera de un mes. `estado_cobranza` es el
+-- estado ejecutivo (ver dominio/estados.ts); `estado` es la columna
+-- heredada del prototipo y ya no se usa.
 CREATE TABLE IF NOT EXISTS cartera_clientes (
     id TEXT PRIMARY KEY,
     cartera_id TEXT NOT NULL,
@@ -129,6 +157,12 @@ CREATE TABLE IF NOT EXISTS cartera_clientes (
         CHECK (estado IN ('PENDIENTE','EN_GESTION','CONTACTADO','NO_CONTACTADO','COMPROMISO','CERRADO')),
     categoria_gestion TEXT,
     texto_gestion TEXT,
+    estado_cobranza TEXT NOT NULL DEFAULT 'PENDIENTE',
+    fecha_compromiso TEXT,
+    monto_compromiso REAL,
+    proxima_gestion TEXT,
+    ultima_gestion TEXT,
+    monto_recuperado REAL NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (cartera_id) REFERENCES carteras(id) ON DELETE CASCADE,
@@ -164,6 +198,8 @@ CREATE TABLE IF NOT EXISTS errores_importacion (
     FOREIGN KEY (importacion_id) REFERENCES importaciones(id) ON DELETE CASCADE
 );
 
+-- Historial del caso (RF-18, RF-33). `tipo`:
+--   comentario | cambio_estado | llamada
 CREATE TABLE IF NOT EXISTS gestiones (
     id TEXT PRIMARY KEY,
     cliente_id TEXT,
@@ -174,9 +210,58 @@ CREATE TABLE IF NOT EXISTS gestiones (
     categoria TEXT,
     resultado TEXT,
     proxima_accion TEXT,
+    tipo TEXT NOT NULL DEFAULT 'comentario',
+    estado_anterior TEXT,
+    estado_nuevo TEXT,
+    monto REAL,
+    fecha_compromiso TEXT,
+    telefono TEXT,
+    duracion INTEGER,
+    -- Llamadas: contestada | no_contesta | ocupado | rechazada | apagado | inexistente | cortada
+    motivo_llamada TEXT,
     FOREIGN KEY (cliente_id) REFERENCES clientes(id),
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
     FOREIGN KEY (cartera_id) REFERENCES carteras(id)
+);
+
+-- Recordatorios de vuelta de gestión (v0.3.1). Se crean al registrar una
+-- gestión según el estado (dominio/estados.ts → recordatorio) o con la hora
+-- que elija el ejecutivo. `fecha_hora` es hora LOCAL 'AAAA-MM-DDTHH:MM'.
+-- Una gestión nueva sobre el cliente da por cumplidos los pendientes.
+CREATE TABLE IF NOT EXISTS recordatorios (
+    id TEXT PRIMARY KEY,
+    usuario_id TEXT NOT NULL,
+    cartera_id TEXT NOT NULL,
+    cliente_id TEXT NOT NULL,
+    fecha_hora TEXT NOT NULL,
+    motivo TEXT NOT NULL,
+    estado_origen TEXT,
+    estado TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (estado IN ('PENDIENTE','HECHO','DESCARTADO')),
+    avisado INTEGER NOT NULL DEFAULT 0 CHECK (avisado IN (0, 1)),
+    creado_en TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    resuelto_en TEXT,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+    FOREIGN KEY (cartera_id) REFERENCES carteras(id) ON DELETE CASCADE,
+    FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE
+);
+
+-- Fotografía congelada de un mes (RF-25): KPIs, gráficos y detalle de
+-- clientes en JSON, para consultar y descargar meses anteriores aunque la
+-- cartera cambie después.
+CREATE TABLE IF NOT EXISTS reportes_mensuales (
+    id TEXT PRIMARY KEY,
+    usuario_id TEXT NOT NULL,
+    periodo_id TEXT NOT NULL,
+    titulo TEXT NOT NULL,
+    automatico INTEGER NOT NULL DEFAULT 0 CHECK (automatico IN (0, 1)),
+    notas TEXT,
+    deuda_total REAL NOT NULL DEFAULT 0,
+    recuperado REAL NOT NULL DEFAULT 0,
+    clientes INTEGER NOT NULL DEFAULT 0,
+    datos TEXT NOT NULL,
+    generado_en TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+    FOREIGN KEY (periodo_id) REFERENCES periodos(id)
 );
 
 CREATE TABLE IF NOT EXISTS configuracion (
@@ -185,36 +270,6 @@ CREATE TABLE IF NOT EXISTS configuracion (
     actualizado_en TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_importaciones_hash ON importaciones(cartera_id, archivo_hash);
-CREATE INDEX IF NOT EXISTS idx_clientes_rut ON clientes(rut);
-CREATE INDEX IF NOT EXISTS idx_operaciones_cliente ON operaciones(cliente_id);
-CREATE INDEX IF NOT EXISTS idx_operaciones_periodo ON operaciones(periodo_id);
-CREATE INDEX IF NOT EXISTS idx_telefonos_cliente ON telefonos(cliente_id);
-CREATE INDEX IF NOT EXISTS idx_correos_cliente ON correos(cliente_id);
-CREATE INDEX IF NOT EXISTS idx_cartera_clientes_cartera ON cartera_clientes(cartera_id);
-CREATE INDEX IF NOT EXISTS idx_cartera_clientes_cliente ON cartera_clientes(cliente_id);
-CREATE INDEX IF NOT EXISTS idx_importaciones_cartera ON importaciones(cartera_id);
-CREATE INDEX IF NOT EXISTS idx_gestiones_cliente ON gestiones(cliente_id);
-CREATE INDEX IF NOT EXISTS idx_gestiones_categoria ON gestiones(categoria);
-
--- Vista de compatibilidad para el panel heredado del piloto. Mantiene la UI
--- desacoplada del detalle normalizado de operaciones y cartera.
-CREATE VIEW IF NOT EXISTS v_clientes_resumen AS
-SELECT
-    c.id,
-    c.rut,
-    c.dv,
-    c.nombre AS nombre_cliente,
-    COALESCE(SUM(o.deuda_total), 0) AS monto_deuda,
-    MAX(o.dias_mora) AS dias_mora,
-    MAX(o.tramo_mora) AS tramo_mora,
-    AVG(o.pct_recuperacion) AS pct_recuperacion,
-    MAX(cc.categoria_gestion) AS categoria_gestion,
-    MAX(d.comuna) AS comuna,
-    MAX(i.nombre_archivo) AS origen_archivo
-FROM clientes c
-LEFT JOIN operaciones o ON o.cliente_id = c.id
-LEFT JOIN cartera_clientes cc ON cc.cliente_id = c.id
-LEFT JOIN direcciones d ON d.cliente_id = c.id
-LEFT JOIN importaciones i ON i.cartera_id = cc.cartera_id
-GROUP BY c.id, c.rut, c.dv, c.nombre;
+-- La vista del prototipo mezclaba todos los meses; se reemplaza por
+-- consultas acotadas al período en servicios/servicioCartera.ts.
+DROP VIEW IF EXISTS v_clientes_resumen;

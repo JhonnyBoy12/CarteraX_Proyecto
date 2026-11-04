@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 430" role="img" aria-label="Vista física: el PC del ejecutivo ejecuta CarteraX y guarda la base SQLite local; se comunica por Wi-Fi local con el teléfono Android que ejecuta Phoenix Mobile en el puerto 8765; el teléfono llama por la red telefónica; GitHub Actions produce los instaladores." font-family="Archivo, Segoe UI, sans-serif">
+  <defs>
+    <marker id="f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" fill="#515C77"/></marker>
+    <marker id="fn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" fill="#DE762E"/></marker>
+  </defs>
+  <rect x="0" y="0" width="1000" height="430" fill="#FFFFFF"/>
+  <g font-size="12" fill="#16203A">
+    <!-- PC -->
+    <rect x="20" y="20" width="440" height="290" rx="10" fill="#F4F5F9" stroke="#16203A" stroke-width="1.5"/>
+    <text x="36" y="44" font-size="11.5" fill="#515C77">«dispositivo»</text>
+    <text x="36" y="63" font-size="15" font-weight="700">PC del ejecutivo</text>
+    <text x="36" y="82" fill="#515C77">Windows 10/11 x64 (también macOS y Linux)</text>
+    <rect x="40" y="100" width="400" height="62" rx="6" fill="#FCEBDD" stroke="#DE762E" stroke-width="1.5"/>
+    <text x="56" y="124" font-weight="700">«artefacto» CarteraX (Electron 31, asar)</text>
+    <text x="56" y="144" fill="#515C77">instalador NSIS o .exe portable · Node 20 embebido</text>
+    <rect x="40" y="176" width="400" height="56" rx="6" fill="#FFFFFF" stroke="#515C77"/>
+    <text x="56" y="199" font-weight="700">«archivo» carterax_fusion.db</text>
+    <text x="56" y="218" fill="#515C77">%APPDATA%\CarteraX\ · SQLite · esquema v4</text>
+    <rect x="40" y="246" width="400" height="48" rx="6" fill="#FFFFFF" stroke="#515C77" stroke-dasharray="4 3"/>
+    <text x="56" y="267" font-weight="700">Archivos del usuario</text>
+    <text x="56" y="284" fill="#515C77">cartera Excel/CSV · reportes · respaldos .db</text>
+    <line x1="240" y1="162" x2="240" y2="173" stroke="#515C77" stroke-width="1.4" marker-end="url(#f)"/>
+
+    <!-- Teléfono -->
+    <rect x="600" y="20" width="380" height="214" rx="10" fill="#F4F5F9" stroke="#172039" stroke-width="1.5"/>
+    <text x="616" y="44" font-size="11.5" fill="#515C77">«dispositivo»</text>
+    <text x="616" y="63" font-size="15" font-weight="700">Teléfono Android 8.0 o superior</text>
+    <rect x="620" y="80" width="340" height="62" rx="6" fill="#172039"/>
+    <text x="636" y="104" font-weight="700" fill="#FFFFFF">«artefacto» PhoenixMobile.apk 0.3.0</text>
+    <text x="636" y="124" fill="#FCEBDD">servidor TCP en el puerto 8765</text>
+    <rect x="620" y="154" width="340" height="62" rx="6" fill="#FFFFFF" stroke="#515C77"/>
+    <text x="636" y="177" font-weight="700">Permisos</text>
+    <text x="636" y="196" fill="#515C77">CALL_PHONE · READ_PHONE_STATE</text>
+    <text x="636" y="211" fill="#515C77">READ_CALL_LOG · INTERNET</text>
+
+    <!-- Red telefónica -->
+    <rect x="600" y="276" width="380" height="50" rx="8" fill="#EEF0F5" stroke="#515C77"/>
+    <text x="790" y="298" text-anchor="middle" font-weight="700">Red telefónica móvil</text>
+    <text x="790" y="315" text-anchor="middle" fill="#515C77">llamada saliente al cliente deudor</text>
+
+    <!-- GitHub -->
+    <rect x="20" y="356" width="440" height="56" rx="8" fill="#FFFFFF" stroke="#8A93A8" stroke-dasharray="5 3"/>
+    <text x="36" y="379" font-weight="700">GitHub (nube) · Actions y Releases</text>
+    <text x="36" y="398" fill="#515C77">compila instaladores y APK; no participa en la operación</text>
+  </g>
+  <line x1="460" y1="128" x2="597" y2="111" stroke="#DE762E" stroke-width="2" marker-end="url(#fn)" marker-start="url(#fn)"/>
+  <g font-size="11.5" fill="#A9520F" font-family="Archivo, Segoe UI, sans-serif">
+    <text x="470" y="160">Wi-Fi local (misma red)</text>
+    <text x="470" y="176">HTTP/JSON sin cifrar</text>
+    <text x="470" y="192">sin autenticación</text>
+  </g>
+  <line x1="790" y1="234" x2="790" y2="273" stroke="#515C77" stroke-width="1.4" marker-end="url(#f)"/>
+  <text x="798" y="258" font-size="11.5" fill="#515C77" font-family="Archivo, Segoe UI, sans-serif">ACTION_CALL</text>
+  <line x1="240" y1="356" x2="240" y2="313" stroke="#8A93A8" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#f)"/>
+  <text x="248" y="340" font-size="11.5" fill="#515C77" font-family="Archivo, Segoe UI, sans-serif">descarga e instalación</text>
+</svg>

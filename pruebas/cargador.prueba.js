@@ -88,5 +88,46 @@ prueba("CSV UTF-8 con BOM y ','", () => {
 prueba("formato no soportado da error claro", () =>
   assert.throws(() => L.detectarFormato("cartera.pdf"), /Formato no soportado/));
 
+console.log("\nRevisión de datos antes de importar (v0.3.1)");
+{
+  const V = require("../dist/importacion/validador");
+  const fs = require("fs");
+  const os = require("os");
+  const tmp = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "carterax-validador-")), "errores.csv");
+  fs.writeFileSync(
+    tmp,
+    [
+      "rut,nombre,deuda_total,fono1,correo_1,DDAS_FEC_1ER_VCTO",
+      "24878600-9,VALENTINA,4515200,956844906,ok@correo.cl,20230810",
+      ",SIN RUT,1200000,955511122,,20230110",
+      "12345678-0,DV MALO,no informa,123,sin-arroba,20231340",
+      "17315457-1,REPETIDO,8482000,972669752,,20221110",
+      "17315457-1,REPETIDO,8482000,972669752,,20221110",
+    ].join("\n")
+  );
+  const h = P.previsualizarArchivo(tmp).hojas[0];
+  const v = h.validacion;
+  const codigos = v.observaciones.map((o) => o.codigo);
+  prueba("dígito verificador módulo 11", () => {
+    igual(V.calcularDv("11111111"), "1");
+    igual(V.calcularDv("12345678"), "5");
+    igual(V.calcularDv("24878600"), "0");
+  });
+  prueba("la fila sin RUT se informa como no cargada", () => {
+    igual(v.filasRechazadas, 1);
+    igual(v.observaciones.find((o) => o.codigo === "sin_rut").filas[0].fila, 3);
+  });
+  prueba("detecta DV erróneo, deuda ilegible, teléfono, correo y fecha", () =>
+    ["dv_incorrecto", "deuda_ilegible", "telefono_descartado", "sin_telefono", "correo_invalido", "fecha_ilegible"].forEach((c) =>
+      assert.ok(codigos.includes(c), c)
+    ));
+  prueba("avisa filas repetidas sin número de operación", () => assert.ok(codigos.includes("fila_repetida")));
+  prueba("cuenta filas válidas, con avisos y rechazadas", () => igual(v.filasValidas + v.filasConAvisos + v.filasRechazadas, 5));
+  prueba("cada observación dice qué pasa y qué hacer", () => assert.ok(v.observaciones.every((o) => o.efecto && o.accion)));
+  prueba("marca la celda con el encabezado original", () => assert.ok(v.marcas[4].includes("deuda_total")));
+  prueba("el archivo de ejemplo no tiene filas rechazadas", () =>
+    igual(P.previsualizarArchivo(path.join(EJ, "cartera_ejemplo_utf8.csv")).hojas[0].validacion.filasRechazadas, 0));
+}
+
 console.log(`\n${ok} correctas, ${fallas.length} con falla\n`);
 process.exit(fallas.length ? 1 : 0);

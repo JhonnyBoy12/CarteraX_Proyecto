@@ -1,4 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Identidad Phoenix (RNF-03): naranja y blanco, igual que CarteraX de escritorio
+     (perfil Phoenix Service: azul noche, naranja cálido, durazno). Tema oscuro en values-night. -->
 <resources>
-    <color name="phoenix_blue">#1565C0</color>
-    <color name="white">#FFFFFF</color>
+    <color name="phoenix_naranja">#DE762E</color>
+    <color name="phoenix_naranja_hondo">#A9520F</color>
+    <color name="phoenix_naranja_suave">#FCEBDD</color>
+    <color name="tinta">#16203A</color>
+    <color name="pizarra">#515C77</color>
+    <color name="linea">#DCE0EA</color>
+    <color name="fondo">#EEF0F5</color>
+    <color name="superficie">#FFFFFF</color>
+    <color name="superficie_2">#F6F7FB</color>
+    <color name="blanco">#FFFFFF</color>
+    <color name="tinta_fija">#16203A</color>
+    <!-- Fondo del ícono adaptable (igual en claro y oscuro) -->
+    <color name="logo_fondo">#16203A</color>
+    <color name="positivo">#17773B</color>
+    <color name="positivo_suave">#E5F3EA</color>
+    <color name="alerta">#C0281D</color>
+    <color name="alerta_suave">#FCEBE9</color>
+    <color name="gris_estado">#9AA3AD</color>
+
+    <!-- Cabecera azul noche (igual que la barra lateral del escritorio; el nombre se conserva) -->
+    <color name="grafito">#172039</color>
+    <color name="grafito_tenue">#9BA7C6</color>
+
+    <!-- Franja de estados de cobranza (firma visual compartida con el escritorio) -->
+    <color name="tono_verde">#1D8749</color>
+    <color name="tono_verde_claro">#6A9A26</color>
+    <color name="tono_naranja">#DE762E</color>
+    <color name="tono_celeste">#1A87A2</color>
+    <color name="tono_violeta">#7457C2</color>
+    <color name="tono_azul">#3767C4</color>
+    <color name="tono_ambar">#CC860F</color>
+    <color name="tono_rojo_fuerte">#922320</color>
 </resources>

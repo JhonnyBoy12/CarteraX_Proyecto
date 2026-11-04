@@ -5,8 +5,10 @@
  * `pc/phoenix_phone_test.py`, con el MISMO protocolo:
  *
  *   Phoenix Desktop ──Wi-Fi──▶ Phoenix Mobile (Android, puerto 8765)
- *     GET  /ping  → { ok, app, directCall, callPermission, device }
- *     POST /call  { "phone": "+569..." } → { ok, phone, action: "CALL" }
+ *     GET  /ping  → { ok, app, version, directCall, callPermission, callStateTracking, device }
+ *     POST /call  { phone, name?, rut? } → { ok, phone, action: "CALL" }
+ *     GET  /call-status        → { ok, callId, state, completed, answered, duration, elapsed?, phone }
+ *     POST /call-status/ack    → { ok }
  *     Errores: 400 (número vacío), 403 (sin permiso CALL_PHONE), 404, 500
  *
  * Corre en el proceso principal (Node), por lo que no hay restricciones
@@ -157,7 +159,8 @@ export async function pingMovil(ipIngresada: string): Promise<Phoenix.EstadoMovi
         puerto: PUERTO_MOVIL,
         dispositivo: String(cuerpo.device ?? "Android"),
         permisoLlamadas: Boolean(cuerpo.callPermission),
-        llamadaDirecta: Boolean(cuerpo.directCall),
+        seguimientoLlamadas: Boolean(cuerpo.callStateTracking),
+        version: cuerpo.version ? String(cuerpo.version) : undefined,
       };
     }
     return { conectado: false, ip, puerto: PUERTO_MOVIL, detalle: "El teléfono respondió, pero la respuesta no fue válida." };
@@ -178,7 +181,8 @@ export async function pingMovil(ipIngresada: string): Promise<Phoenix.EstadoMovi
  */
 export async function llamarDesdeMovil(
   ipIngresada: string,
-  telefono: string
+  telefono: string,
+  cliente: { nombre?: string | null; rut?: string | null } = {}
 ): Promise<{ numero: string; accion: string }> {
   const ip = normalizarIp(ipIngresada);
   if (!ip) throw new Error("No hay IP configurada para Phoenix Mobile.");
@@ -186,7 +190,13 @@ export async function llamarDesdeMovil(
   const numero = normalizarTelefono(telefono);
   if (!telefonoEsValido(numero)) throw new Error(`Número inválido: "${telefono}"`);
 
-  const { status, cuerpo } = await httpJson(ip, "/call", "POST", { phone: numero });
+  // `name` y `rut` son opcionales: Phoenix Mobile v0.3 los muestra en pantalla;
+  // versiones anteriores los ignoran.
+  const { status, cuerpo } = await httpJson(ip, "/call", "POST", {
+    phone: numero,
+    name: cliente.nombre ?? undefined,
+    rut: cliente.rut ?? undefined,
+  });
   if (status === 200 && cuerpo.ok) {
     return { numero, accion: String(cuerpo.action ?? "CALL") };
   }
@@ -198,8 +208,12 @@ export interface EstadoLlamadaMovil {
   callId: number;
   estado: "IDLE" | "RINGING" | "OFFHOOK";
   completada: boolean;
+  /** `null`: el teléfono no pudo saberlo (sin permiso de registro de llamadas). */
   contestada: boolean | null;
+  /** Segundos de conversación según el registro de llamadas de Android. */
   duracion: number;
+  /** Segundos desde que se marcó hasta colgar (Phoenix Mobile 0.3.1+). */
+  transcurrido: number | null;
   telefono: string | null;
 }
 
@@ -215,6 +229,7 @@ export async function obtenerEstadoLlamadaMovil(ipIngresada: string): Promise<Es
     completada: Boolean(cuerpo.completed),
     contestada: cuerpo.answered === null || cuerpo.answered === undefined ? null : Boolean(cuerpo.answered),
     duracion: Number(cuerpo.duration ?? 0),
+    transcurrido: typeof cuerpo.elapsed === "number" ? cuerpo.elapsed : null,
     telefono: cuerpo.phone ? String(cuerpo.phone) : null,
   };
 }

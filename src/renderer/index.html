@@ -1,399 +1,478 @@
 <!DOCTYPE html>
 <!--
-  ERS Phoenix — Interfaz (renderer)
-  v0.2.0: rediseño con navegación lateral. Funciona dentro de Electron (IPC)
-  y desde un navegador servido por el backend HTTP (ver renderer/api.ts).
-  Las vistas son <section data-vista="..."> y se muestran de a una.
+  CarteraX Phoenix — interfaz de escritorio (renderer).
+  Cada vista es un <section class="vista" data-vista="..."> y se muestra de a una.
+  La lógica está repartida en un script por vista (vista-*.ts) y app.ts.
 -->
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:" />
-  <title>CarteraX — Gestión de cartera</title>
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'" />
+  <title>CarteraX Phoenix</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 
-  <section class="pantalla-login" id="pantalla-login">
-    <div class="login-presentacion" aria-label="Identidad de CarteraX Phoenix">
-      <div class="login-orbita login-orbita-una" aria-hidden="true"></div>
-      <div class="login-orbita login-orbita-dos" aria-hidden="true"></div>
-      <div class="login-identidad">
-        <span class="login-emblema" aria-hidden="true"><span></span></span>
-        <div>
-          <p class="login-supra">PLATAFORMA DE GESTIÓN</p>
-          <div class="login-wordmark">Cartera<span>X</span></div>
-          <p class="login-phoenix">PHOENIX <span>·</span> GESTIÓN COMERCIAL</p>
-        </div>
-      </div>
-      <div class="login-mensaje">
-        <p class="login-etiqueta">CONTROL · SEGUIMIENTO · RESULTADOS</p>
-        <h2>Tu cartera,<br><span>bajo control.</span></h2>
-        <p>Una visión clara de tus clientes, tus gestiones y los indicadores de cada período.</p>
-      </div>
-      <div class="login-pie-marca"><span class="login-punto"></span> Entorno de trabajo seguro</div>
+  <!-- ============================== LOGIN ============================== -->
+  <section class="pantalla-login" id="pantalla-login" hidden>
+    <div class="login-marca">
+      <img src="assets/logo.svg" alt="" width="56" height="56" />
+      <p class="login-nombre">CarteraX</p>
+      <p class="login-lema">Gestión de cartera y cobranza para ejecutivos Phoenix.</p>
     </div>
-
-    <form class="tarjeta-login" id="form-login">
-      <div class="login-marca-movil">
-        <span class="login-emblema login-emblema-pequeno" aria-hidden="true"><span></span></span>
-        <span>Cartera<strong>X</strong></span>
-      </div>
-      <p class="login-bienvenida">BIENVENIDO/A</p>
+    <form class="tarjeta-login" id="form-login" novalidate>
       <h1>Iniciar sesión</h1>
-      <p class="bajada">Ingresa con tus credenciales para continuar.</p>
-      <label class="campo-login"><span>Correo electrónico</span><input id="login-email" type="email" autocomplete="username" placeholder="nombre@empresa.cl" required /></label>
-      <label class="campo-login"><span>Contraseña</span>
-        <span class="login-password-wrap">
-          <input id="login-password" type="password" autocomplete="current-password" placeholder="Ingresa tu contraseña" required />
-          <button class="login-ver-clave" id="login-toggle-password" type="button" aria-label="Mostrar contraseña" aria-pressed="false">Mostrar</button>
-        </span>
-      </label>
-      <p class="login-error" id="login-error" role="alert" hidden></p>
-      <button class="btn primario login-boton" type="submit">Ingresar <span aria-hidden="true">→</span></button>
-      <p class="login-ayuda">Acceso exclusivo para usuarios autorizados.</p>
+      <label class="campo"><span>Correo</span><input id="login-email" type="email" autocomplete="username" required /></label>
+      <label class="campo"><span>Contraseña</span><input id="login-password" type="password" autocomplete="current-password" required /></label>
+      <p class="form-error" id="login-error" role="alert" hidden></p>
+      <button class="btn primario grande" type="submit">Ingresar</button>
+      <p class="login-ayuda">Primer uso: ejecutivo@carterax.cl / CarteraX123! (cámbiala en Configuración).</p>
     </form>
   </section>
+
   <div class="app" id="aplicacion" hidden>
     <!-- ============================ NAVEGACIÓN ============================ -->
     <aside class="lateral">
       <div class="marca">
-        <span class="marca-simbolo" aria-hidden="true"></span>
-        <div>
-          <strong>CarteraX</strong>
-          <span class="marca-sub">Gestión de cartera</span>
-        </div>
+        <img src="assets/logo.svg" alt="" width="34" height="34" />
+        <div><strong>CarteraX</strong><span>Phoenix</span></div>
       </div>
 
       <nav class="menu" aria-label="Secciones">
-        <button class="menu-item activo" data-ir="panel">Panel</button>
-        <button class="menu-item" data-ir="importar">Importar cartera</button>
-        <button class="menu-item" data-ir="clientes">Clientes</button>
-        <button class="menu-item" data-ir="telefono">Teléfono</button>
-        <button class="menu-item" data-ir="historial">Historial</button>
-        <button class="menu-item" data-ir="servidor">Servidor</button>
+        <button class="menu-item" data-ir="dashboard">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h6V4H4zm0 7h6v-5H4zm10 0h6v-9h-6zm0-16v5h6V4z"/></svg>Dashboard
+          <span class="insignia" id="insignia-alertas" hidden title="Alertas activas"></span>
+        </button>
+        <button class="menu-item" data-ir="clientes">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zm-8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-2.7 0-6 1.3-6 3.5V19h7v-2.5c0-1 .4-2 1.2-2.8A9 9 0 0 0 8 13zm8 0c-3 0-6 1.5-6 4v2h12v-2c0-2.5-3-4-6-4z"/></svg>Clientes
+        </button>
+        <button class="menu-item" data-ir="cola">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.6a1 1 0 0 1-.25 1z"/></svg>Cola de llamadas
+          <span class="insignia-cola" id="insignia-cola" hidden title="Cola en marcha"></span>
+        </button>
+        <button class="menu-item" data-ir="reportes">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v15H6zm8 1.5V8h4.5zM9 12v6h2v-6zm4 2v4h2v-4zm-8-4v8h2v-8z" transform="translate(-1 0)"/></svg>Reportes
+        </button>
+        <button class="menu-item" data-ir="importar">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 3h2v9.2l3.3-3.3 1.4 1.4L12 16l-5.7-5.7 1.4-1.4 3.3 3.3zM4 18h16v2H4z"/></svg>Importar cartera
+        </button>
+        <span class="menu-separador"></span>
+        <button class="menu-item" data-ir="telefono">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm0 3v13h10V5zm5 14.2a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/></svg>Teléfono
+        </button>
+        <button class="menu-item" data-ir="config">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3h-4l-.4 2.6a7.4 7.4 0 0 0-1.7 1l-2.4-1-2 3.5L6.6 11a7.5 7.5 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1c.5.4 1.1.7 1.7 1L11 21h4l.4-2.6c.6-.3 1.2-.6 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg>Configuración
+        </button>
       </nav>
 
-      <div class="usuario-lateral">
-        <strong id="usuario-nombre">Ejecutivo</strong>
-        <span id="usuario-email"></span>
-        <button class="btn secundario" id="btn-cerrar-sesion" type="button">Cerrar sesión</button>
-      </div>
+      <button class="estado-dispositivo" data-ir="telefono" id="estado-telefono">
+        <span class="punto"></span><span class="estado-texto">Teléfono sin vincular</span>
+      </button>
 
-      <div class="estados">
-        <button class="estado" data-ir="telefono" id="estado-telefono">
-          <span class="punto"></span><span class="estado-texto">Teléfono sin configurar</span>
-        </button>
-        <button class="estado" data-ir="servidor" id="estado-servidor">
-          <span class="punto"></span><span class="estado-texto">Servidor…</span>
-        </button>
-        <p class="modo" id="modo-app"></p>
+      <div class="usuario-lateral">
+        <div><strong id="usuario-nombre">Ejecutivo</strong><span id="usuario-email"></span></div>
+        <button class="btn texto pequeño" id="btn-cerrar-sesion" type="button">Cerrar sesión</button>
       </div>
     </aside>
 
-    <main class="contenido">
-      <!-- =============================== PANEL =============================== -->
-      <section class="vista activa" data-vista="panel">
-        <header class="cabecera">
-          <div>
-            <h1>Panel de cartera</h1>
-            <div class="panel-contexto"><p class="bajada" id="panel-bajada">Resumen de los clientes cargados.</p><span class="periodo-activo" id="panel-periodo-activo">Período: —</span></div>
-          </div>
-          <div class="acciones-cabecera">
-            <label class="selector-periodo"><span>Período</span><select id="periodo-panel" aria-label="Período del panel"><option value="">Cargando períodos…</option></select></label>
-            <button class="btn secundario" id="btn-actualizar">Actualizar</button>
+    <div class="principal">
+      <!-- Barra superior: mes de trabajo -->
+      <header class="barra-superior">
+        <label class="selector-mes">
+          <span>Mes de trabajo</span>
+          <select id="selector-mes" aria-label="Mes de trabajo"></select>
+        </label>
+        <p class="aviso-mes" id="aviso-mes-cerrado" hidden></p>
+        <span class="espaciador"></span>
+        <button class="btn-recordatorios" id="btn-recordatorios" type="button" aria-controls="panel-recordatorios" aria-expanded="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1z"/></svg>
+          Recordatorios <span class="contador" id="contador-recordatorios">0</span>
+        </button>
+      </header>
+
+      <main class="contenido" id="contenido">
+
+        <!-- ============================ DASHBOARD ============================ -->
+        <section class="vista" data-vista="dashboard" hidden>
+          <header class="cabecera">
+            <div><h1 id="dashboard-titulo">Dashboard</h1><p class="bajada" id="dashboard-bajada"></p></div>
+            <div class="acciones">
+              <button class="btn secundario" id="btn-dashboard-actualizar">Actualizar</button>
+              <button class="btn primario" id="btn-dashboard-reporte">Guardar reporte del mes</button>
+            </div>
+          </header>
+          <div class="estado-vacio" id="dashboard-vacio" hidden>
+            <h2>Este mes todavía no tiene cartera</h2>
+            <p>Importa el Excel o CSV de tu cartera para ver la deuda, los estados de cobranza y las alertas.</p>
             <button class="btn primario" data-ir="importar">Importar cartera</button>
           </div>
-        </header>
+          <div id="dashboard-contenido"></div>
+        </section>
 
-        <div class="vacio" id="panel-vacio" hidden>
-          <h2>Aún no hay clientes cargados</h2>
-          <p>Importa un archivo Excel o CSV de cartera para ver aquí la deuda, la mora y las gestiones.</p>
-          <button class="btn primario" data-ir="importar">Importar mi primer archivo</button>
-        </div>
+        <!-- ============================= CLIENTES ============================= -->
+        <section class="vista vista-clientes" data-vista="clientes" hidden>
+          <header class="cabecera">
+            <div><h1>Clientes</h1><p class="bajada" id="clientes-resumen"></p></div>
+            <div class="acciones">
+              <button class="btn secundario" id="btn-exportar-xlsx">Exportar a Excel</button>
+              <button class="btn secundario" id="btn-exportar-csv">CSV</button>
+            </div>
+          </header>
 
-        <div id="panel-datos">
-          <section class="bloque evolucion-bloque" aria-labelledby="evolucion-titulo">
-            <div class="evolucion-cabecera">
-              <div>
-                <p class="evolucion-supra">TENDENCIA DE CARTERA</p>
-                <h2 id="evolucion-titulo">Evolución mensual</h2>
-                <p class="bajada" id="evolucion-subtitulo">Deuda total por período importado</p>
-              </div>
-              <div class="evolucion-filtros" aria-label="Filtros del gráfico de evolución">
-                <label><span>Indicador</span><select id="filtro-evolucion-metrica"><option value="deuda">Deuda total</option><option value="clientes">Cantidad de clientes</option></select></label>
-                <label><span>Períodos</span><select id="filtro-evolucion-rango"><option value="6">Últimos 6</option><option value="3">Últimos 3</option><option value="12">Últimos 12</option><option value="todos">Todos</option></select></label>
-              </div>
-            </div>
-            <div class="evolucion-resumen">
-              <div><span class="evolucion-punto"></span><span id="evolucion-etiqueta">Deuda total</span></div>
-              <strong id="evolucion-valor-actual">—</strong>
-              <span id="evolucion-periodo-actual">Selecciona un período</span>
-            </div>
-            <div class="grafico-evolucion" id="grafico-evolucion" role="img" aria-label="Gráfico de línea de evolución mensual">
-              <p class="grafico-vacio">Cargando evolución de cartera…</p>
-            </div>
-            <p class="evolucion-nota" id="evolucion-nota">Cada punto representa una cartera importada en un período. Los valores no se acumulan entre meses.</p>
-          </section>
-
-          <div class="franja-mora" aria-label="Deuda por tramo de mora">
-            <div class="franja-titulo">
-              <h2>Deuda por tramo de mora</h2>
-              <span class="cifra-grande" id="kpi-deuda">$0</span>
-            </div>
-            <div class="franja" id="franja-tramos"></div>
-            <ul class="franja-leyenda" id="leyenda-tramos"></ul>
+          <div class="barra-filtros">
+            <label class="buscador">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4a6 6 0 1 0 3.7 10.7l4.8 4.8 1.4-1.4-4.8-4.8A6 6 0 0 0 10 4zm0 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8z"/></svg>
+              <input type="search" id="buscar-cliente" placeholder="Buscar por RUT, nombre, patente, teléfono o correo" autocomplete="off" />
+              <kbd title="Atajo">/</kbd>
+            </label>
+            <label class="campo-en-linea"><span>Ordenar por</span>
+              <select id="orden-clientes">
+                <option value="prioridad">Prioridad</option>
+                <option value="deuda_desc">Mayor deuda</option>
+                <option value="deuda_asc">Menor deuda</option>
+                <option value="mora_desc">Más días de mora</option>
+                <option value="mora_asc">Menos días de mora</option>
+                <option value="ultima_gestion">Gestión más reciente</option>
+                <option value="compromiso">Fecha de compromiso</option>
+                <option value="nombre">Nombre (A–Z)</option>
+              </select>
+            </label>
+            <button class="btn secundario" id="btn-mas-filtros" aria-expanded="false" aria-controls="panel-filtros">
+              Más filtros <span class="contador activo" id="contador-filtros" hidden></span>
+            </button>
+            <button class="btn texto" id="btn-limpiar-filtros">Limpiar</button>
           </div>
 
-          <dl class="indicadores">
-            <div><dt>Clientes</dt><dd class="cifra" id="kpi-clientes">0</dd></div>
-            <div><dt>Mora promedio</dt><dd class="cifra" id="kpi-mora">—</dd></div>
-            <div><dt>Recuperación promedio</dt><dd class="cifra" id="kpi-recuperacion">—</dd></div>
-            <div><dt>Con teléfono</dt><dd class="cifra" id="kpi-telefono">0</dd></div>
-            <div><dt>Llamadas hoy</dt><dd class="cifra" id="kpi-llamadas">0</dd></div>
-          </dl>
-
-          <div class="rejilla-dos">
-            <section class="bloque">
-              <h2>Mayores deudas</h2>
-              <div class="tabla-envoltura">
-                <table id="tabla-top">
-                  <thead>
-                    <tr><th>RUT</th><th>Nombre</th><th class="num">Deuda</th><th class="num">Días de mora</th><th>Gestión</th></tr>
-                  </thead>
-                  <tbody></tbody>
-                </table>
-              </div>
-            </section>
-            <section class="bloque">
-              <h2>Clientes por resultado de gestión</h2>
-              <ul class="barras" id="barras-categorias"></ul>
-            </section>
+          <div class="panel-filtros" id="panel-filtros" hidden>
+            <fieldset>
+              <legend>Deuda</legend>
+              <div class="rango"><input id="deuda-min" placeholder="Desde $" inputmode="numeric" /><span>a</span><input id="deuda-max" placeholder="Hasta $" inputmode="numeric" /></div>
+              <div class="chips" id="presets-deuda"></div>
+            </fieldset>
+            <fieldset>
+              <legend>Días de mora</legend>
+              <div class="rango"><input id="mora-min" type="number" min="0" placeholder="Desde" /><span>a</span><input id="mora-max" type="number" min="0" placeholder="Hasta" /></div>
+              <div class="chips" id="presets-mora"></div>
+            </fieldset>
+            <fieldset class="selects">
+              <legend>Otros</legend>
+              <select id="filtro-tramo" aria-label="Tramo de mora"><option value="">Todos los tramos</option></select>
+              <select id="filtro-comuna" aria-label="Comuna"><option value="">Todas las comunas</option></select>
+              <select id="filtro-telefono" aria-label="Teléfono">
+                <option value="">Con o sin teléfono</option><option value="si">Con teléfono válido</option><option value="no">Sin teléfono válido</option>
+              </select>
+              <select id="filtro-prioridad" aria-label="Prioridad">
+                <option value="">Cualquier prioridad</option><option value="alta">Prioridad alta</option><option value="media">Prioridad media</option><option value="baja">Prioridad baja</option>
+              </select>
+            </fieldset>
           </div>
-        </div>
-      </section>
 
-      <!-- ============================== IMPORTAR ============================== -->
-      <section class="vista" data-vista="importar">
-        <header class="cabecera">
-          <div>
-            <h1>Importar cartera</h1>
-            <p class="bajada">Excel (.xlsx, .xls, .xlsm, .ods) o texto delimitado (.csv, .tsv, .txt). Revisa la vista previa antes de cargar.</p>
-            <div class="selector-periodo selector-periodo-importacion">
-              <label for="periodo-importacion">Período existente</label>
-              <select id="periodo-importacion" aria-label="Período existente de destino"><option value="">Cargando períodos…</option></select>
-              <label for="periodo-importacion-nuevo">O crear/seleccionar otro mes</label>
-              <input id="periodo-importacion-nuevo" type="month" aria-label="Nuevo período de destino" />
+          <div class="chips-estado" id="chips-estado" aria-label="Filtrar por estado"></div>
+
+          <div class="filtros-rapidos" id="filtros-rapidos" role="group" aria-label="Filtros rápidos">
+            <button data-rapido="" aria-pressed="true">Todos</button>
+            <button data-rapido="compromisos_vencidos" aria-pressed="false">Compromisos vencidos</button>
+            <button data-rapido="compromisos_semana" aria-pressed="false">Compromisos de esta semana</button>
+            <button data-rapido="proxima_gestion_hoy" aria-pressed="false">Agendados para hoy</button>
+            <button data-rapido="sin_gestion" aria-pressed="false">Sin gestión reciente</button>
+            <button data-rapido="gestionados_hoy" aria-pressed="false">Gestionados hoy</button>
+          </div>
+
+          <div class="barra-seleccion" id="barra-seleccion" hidden>
+            <strong id="sel-cantidad"></strong>
+            <button class="btn texto" id="sel-todos-filtrados"></button>
+            <span class="espaciador"></span>
+            <button class="btn primario" id="sel-a-cola">Enviar a la cola</button>
+            <button class="btn secundario" id="sel-cambiar-estado">Cambiar estado</button>
+            <button class="btn texto" id="sel-limpiar">Quitar selección</button>
+          </div>
+
+          <div class="clientes-cuerpo">
+            <div class="tabla-envoltura tabla-principal">
+              <table id="tabla-clientes">
+                <thead>
+                  <tr>
+                    <th class="col-check"><input type="checkbox" id="sel-pagina" aria-label="Seleccionar la página" /></th>
+                    <th>Cliente</th><th>Estado</th><th class="num">Deuda</th><th class="num">Mora</th>
+                    <th class="col-prioridad">Prioridad</th><th class="col-gestion">Última gestión</th><th class="col-telefono">Teléfono</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
             </div>
-            <p class="ayuda-importacion">Elige un período existente o selecciona un mes nuevo. Si ya hay una cartera para ese mes, sus datos se reemplazarán; el historial de importaciones y las gestiones se conservarán.</p>
+
+            <aside class="ficha" id="ficha" hidden aria-label="Ficha del cliente">
+              <button class="ficha-cerrar" id="ficha-cerrar" aria-label="Cerrar ficha">×</button>
+              <div id="ficha-cuerpo"></div>
+            </aside>
           </div>
-        </header>
 
-        <div class="zona-carga" id="zona-carga" tabindex="0" role="button" aria-label="Elegir archivo de cartera">
-          <div class="zona-icono" aria-hidden="true"></div>
-          <p class="zona-principal">Arrastra aquí el archivo de cartera</p>
-          <p class="zona-secundaria">o <span class="enlace">elígelo desde tu equipo</span></p>
-          <p class="zona-nota">El separador del CSV (; , tab |) y la codificación (UTF-8 o Windows) se detectan solos.</p>
-        </div>
+          <footer class="paginacion">
+            <label class="campo-en-linea"><span>Por página</span>
+              <select id="por-pagina"><option>25</option><option selected>50</option><option>100</option><option>200</option></select>
+            </label>
+            <span class="espaciador"></span>
+            <button class="btn secundario" id="pag-anterior">Anterior</button>
+            <span id="pag-info"></span>
+            <button class="btn secundario" id="pag-siguiente">Siguiente</button>
+          </footer>
+        </section>
 
-        <div id="previa" hidden>
-          <div class="previa-cabecera">
+        <!-- ========================= COLA DE LLAMADAS ========================= -->
+        <section class="vista" data-vista="cola" hidden>
+          <header class="cabecera">
             <div>
-              <h2 id="previa-nombre"></h2>
-              <p class="bajada" id="previa-meta"></p>
+              <h1>Cola de llamadas</h1>
+              <p class="bajada">Llama de a uno a los clientes en estado «En cola», por prioridad, desde Phoenix Mobile.</p>
             </div>
-            <div class="acciones-cabecera">
-              <button class="btn secundario" id="btn-cancelar-previa">Elegir otro archivo</button>
-              <button class="btn primario" id="btn-confirmar-importacion">Importar</button>
+            <div class="acciones">
+              <button class="btn primario grande" id="cola-iniciar">Iniciar cola</button>
+              <button class="btn secundario" id="cola-pausar" hidden>Pausar</button>
+              <button class="btn primario" id="cola-reanudar" hidden>Reanudar</button>
+              <button class="btn texto peligro" id="cola-detener" hidden>Detener</button>
             </div>
+          </header>
+          <div id="vista-cola-contenido" class="cola-rejilla">
+            <section class="cola-principal">
+              <div class="cola-estado">
+                <span class="cola-proceso" id="cola-proceso" data-proceso="DETENIDA">Detenida</span>
+                <p id="cola-mensaje" class="bajada"></p>
+              </div>
+              <div class="cola-intento" id="cola-intento" hidden></div>
+              <div class="cola-actual" id="cola-actual"></div>
+            </section>
+            <aside class="cola-lateral">
+              <section class="bloque">
+                <header class="bloque-cab"><h2>Siguen</h2><span class="bajada" id="cola-pendientes"></span></header>
+                <ol class="cola-proximos" id="cola-proximos"></ol>
+                <p class="nota-alerta" id="cola-sin-telefono" hidden></p>
+              </section>
+              <section class="bloque">
+                <header class="bloque-cab"><h2>Esta sesión</h2></header>
+                <dl class="cola-sesion" id="cola-sesion"></dl>
+              </section>
+            </aside>
           </div>
-
-          <div class="pestanas" id="previa-pestanas" role="tablist"></div>
-          <div id="previa-hoja"></div>
-        </div>
-
-        <div class="resultado" id="resultado-importacion" hidden></div>
-      </section>
-
-      <!-- ============================== CLIENTES ============================== -->
-      <section class="vista" data-vista="clientes">
-        <header class="cabecera">
-          <div>
-            <h1>Clientes</h1>
-            <p class="bajada" id="clientes-bajada">Busca por RUT o nombre y llama desde el teléfono conectado.</p>
-          </div>
-        </header>
-
-        <div class="barra-clientes">
-          <label class="selector-periodo"><span>Período</span><select id="periodo-clientes" aria-label="Período de clientes"><option value="">Cargando períodos…</option></select></label>
-          <input type="search" id="buscar-cliente" placeholder="Buscar por RUT o nombre" autocomplete="off" />
-          <button class="btn secundario" id="btn-filtros" type="button" aria-expanded="false" aria-controls="filtros-avanzados">Filtros</button>
-        </div>
-        <div class="filtros" id="filtros-avanzados" hidden>
-          <label for="filtro-categoria">Estado de gestión</label>
-          <select id="filtro-categoria"><option value="">Todos los estados</option></select>
-          <button class="btn secundario" id="btn-limpiar-filtros" type="button">Limpiar filtros</button>
-        </div>
-
-        <div class="tabla-envoltura">
-          <table id="tabla-clientes">
-            <thead>
-              <tr>
-                <th>RUT</th><th>Nombre</th><th class="num">Deuda</th><th class="num">Mora</th>
-                <th>Tramo</th><th>Estado importado</th><th>Teléfonos</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-
-        <div class="paginacion">
-          <button class="btn secundario" id="pag-anterior">Anterior</button>
-          <span id="pag-info"></span>
-          <button class="btn secundario" id="pag-siguiente">Siguiente</button>
-        </div>
-      </section>
-
-      <!-- ============================== TELÉFONO ============================== -->
-      <section class="vista" data-vista="telefono">
-        <header class="cabecera">
-          <div>
-            <h1>Teléfono</h1>
-            <p class="bajada">Phoenix Mobile realiza las llamadas con la SIM del teléfono Android, conectado por Wi‑Fi.</p>
-          </div>
-        </header>
-
-        <div class="rejilla-dos mitades">
           <section class="bloque">
-            <h2>Conexión</h2>
-            <label class="campo">
-              <span>IP que muestra Phoenix Mobile</span>
-              <input type="text" id="movil-ip" placeholder="192.168.1.25" inputmode="decimal" />
-            </label>
-            <button class="btn primario" id="btn-probar-movil">Probar conexión</button>
-
-            <div class="ficha-movil" id="ficha-movil" data-estado="desconocido">
-              <p class="ficha-titulo" id="movil-titulo">Sin probar</p>
-              <p id="movil-detalle" class="bajada">Escribe la IP y prueba la conexión.</p>
+            <header class="bloque-cab"><h2>Últimas llamadas</h2></header>
+            <div class="tabla-envoltura">
+              <table id="tabla-llamadas-cola" class="tabla-compacta">
+                <thead><tr><th>Fecha</th><th>Cliente</th><th>Número</th><th>Resultado</th><th class="num">Duración</th></tr></thead>
+                <tbody></tbody>
+              </table>
             </div>
-
-            <h2 class="separado">Cola de llamadas</h2>
-            <p class="bajada">La cola usa los teléfonos importados y excluye clientes con estado de pago o cierre.</p>
-            <div class="ficha-movil" id="ficha-cola" data-estado="desconocido">
-              <p class="ficha-titulo" id="cola-titulo">Cola sin consultar</p>
-              <p id="cola-detalle" class="bajada">Consulta la cartera para obtener el siguiente teléfono elegible.</p>
-            </div>
-            <div class="acciones separado">
-              <button class="btn primario" id="btn-iniciar-cola">Iniciar cola</button>
-              <button class="btn secundario" id="btn-detener-cola" disabled>Detener cola</button>
-            </div>
-
-            <h2 class="separado">Llamada manual</h2>
-            <label class="campo">
-              <span>Número</span>
-              <input type="tel" id="movil-numero" placeholder="+56912345678" />
-            </label>
-            <button class="btn primario" id="btn-llamar-manual">Llamar</button>
           </section>
+        </section>
 
-          <section class="bloque">
-            <h2>Cómo conectar</h2>
-            <ol class="pasos">
-              <li>Instala y abre <strong>Phoenix Mobile</strong> en el teléfono Android.</li>
-              <li>Acepta el permiso para realizar llamadas.</li>
-              <li>Conecta el PC y el teléfono a la misma red Wi‑Fi.</li>
-              <li>Escribe la IP que aparece en el teléfono y pulsa «Probar conexión».</li>
-              <li>En <em>Clientes</em>, pulsa un número para llamar. Cada llamada queda registrada.</li>
-            </ol>
-
-          </section>
-        </div>
-
-        <section class="bloque separado">
-          <h2>Últimas llamadas</h2>
-          <div class="tabla-envoltura">
-            <table id="tabla-llamadas">
-              <thead><tr><th>Fecha</th><th>Cliente</th><th>Detalle</th><th>Resultado</th></tr></thead>
-              <tbody></tbody>
-            </table>
+        <!-- ============================= REPORTES ============================= -->
+        <section class="vista" data-vista="reportes" hidden>
+          <header class="cabecera">
+            <div>
+              <h1>Reportes mensuales</h1>
+              <p class="bajada">Cada reporte guarda cómo estaba la cartera en ese momento. Al terminar cada mes se guarda el cierre automáticamente.</p>
+            </div>
+            <div class="acciones"><button class="btn primario" id="btn-reporte-nuevo">Guardar reporte</button></div>
+          </header>
+          <div class="reportes-rejilla">
+            <nav class="lista-reportes" id="lista-reportes" aria-label="Reportes guardados"></nav>
+            <div class="reporte-detalle" id="reporte-detalle"></div>
           </div>
         </section>
-      </section>
 
-      <!-- ============================== HISTORIAL ============================== -->
-      <section class="vista" data-vista="historial">
-        <header class="cabecera">
-          <div>
-            <h1>Historial de importaciones</h1>
-            <p class="bajada">Una fila por cada hoja o archivo CSV cargado.</p>
-          </div>
-        </header>
-        <div class="tabla-envoltura">
-          <table id="tabla-historial">
-            <thead>
-              <tr>
-                <th>Fecha</th><th>Archivo</th><th>Hoja</th>
-                <th class="num">Cargados</th><th class="num">Corregidos</th><th class="num">Con error</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- ============================== SERVIDOR ============================== -->
-      <section class="vista" data-vista="servidor">
-        <header class="cabecera">
-          <div>
-            <h1>Servidor</h1>
-            <p class="bajada">El backend atiende a esta ventana y, si lo permites, a navegadores de otros equipos.</p>
-          </div>
-        </header>
-
-        <div class="rejilla-dos">
-          <section class="bloque">
-            <h2>Estado</h2>
-            <div class="ficha-movil" id="ficha-servidor" data-estado="desconocido">
-              <p class="ficha-titulo" id="servidor-titulo">Consultando…</p>
-              <ul class="urls" id="servidor-urls"></ul>
+        <!-- ============================= IMPORTAR ============================= -->
+        <section class="vista" data-vista="importar" hidden>
+          <header class="cabecera">
+            <div>
+              <h1>Importar cartera</h1>
+              <p class="bajada">Excel (.xlsx, .xls, .xlsm, .ods) o texto (.csv, .tsv, .txt). Revisa la vista previa antes de cargar.</p>
             </div>
+            <label class="campo-en-linea destacado"><span>Mes de la cartera</span><input type="month" id="importar-mes" /></label>
+          </header>
 
-            <form id="form-servidor" class="config-servidor">
-              <label class="interruptor"><input type="checkbox" id="srv-habilitado" /> <span>Servidor HTTP activo</span></label>
-              <label class="interruptor"><input type="checkbox" id="srv-red" /> <span>Permitir acceso desde otros equipos de la red</span></label>
-              <label class="campo corto"><span>Puerto</span><input type="number" id="srv-puerto" min="1024" max="65535" /></label>
-              <button type="submit" class="btn primario">Guardar y reiniciar servidor</button>
-              <p class="bajada" id="srv-nota"></p>
+          <div class="zona-carga" id="zona-carga" tabindex="0" role="button" aria-label="Elegir archivo de cartera">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 16V7.8l-3.3 3.3-1.4-1.4L12 4l5.7 5.7-1.4 1.4L13 7.8V16zm-7 2h16v2H4z"/></svg>
+            <p class="zona-principal">Arrastra aquí el archivo de cartera</p>
+            <p class="zona-secundaria">o <span class="enlace">elígelo desde tu equipo</span></p>
+            <p class="zona-nota">Si un cliente ya está en la cartera de ese mes, se actualizan su deuda y contactos, y conserva su estado y sus gestiones.</p>
+          </div>
+
+          <div id="previa" hidden>
+            <div class="previa-cabecera">
+              <div><h2 id="previa-nombre"></h2><p class="bajada" id="previa-meta"></p></div>
+              <div class="acciones">
+                <button class="btn texto" id="btn-cancelar-previa">Cancelar</button>
+                <button class="btn primario" id="btn-confirmar-importacion">Importar</button>
+              </div>
+            </div>
+            <div class="pestanas" id="previa-pestanas" role="tablist"></div>
+            <div id="previa-hoja"></div>
+          </div>
+
+          <div id="resultado-importacion" hidden></div>
+
+          <section class="bloque">
+            <header class="bloque-cab"><h2>Archivos importados</h2></header>
+            <div class="tabla-envoltura">
+              <table id="tabla-historial" class="tabla-compacta">
+                <thead><tr><th>Fecha</th><th>Mes</th><th>Archivo</th><th>Hoja</th><th class="num">Cargadas</th><th class="num">Con error</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <!-- ============================= TELÉFONO ============================= -->
+        <section class="vista" data-vista="telefono" hidden>
+          <header class="cabecera">
+            <div><h1>Teléfono</h1><p class="bajada">Phoenix Mobile hace las llamadas con la SIM de un teléfono Android conectado a la misma red Wi‑Fi.</p></div>
+          </header>
+          <div class="rejilla-dos">
+            <section class="bloque">
+              <h2>Vincular Phoenix Mobile</h2>
+              <div class="fila-campo">
+                <label class="campo"><span>IP que muestra Phoenix Mobile</span><input type="text" id="movil-ip" placeholder="192.168.1.25" inputmode="decimal" /></label>
+                <button class="btn primario" id="btn-probar-movil">Probar conexión</button>
+              </div>
+              <div class="ficha-estado" id="ficha-movil" data-estado="desconocido">
+                <p class="fe-titulo" id="movil-titulo">Sin vincular</p>
+                <p class="bajada" id="movil-detalle"></p>
+              </div>
+              <h2 class="separado">Llamada manual</h2>
+              <form class="fila-campo" id="form-llamada-manual">
+                <label class="campo"><span>Número</span><input type="tel" id="movil-numero" placeholder="+56912345678" /></label>
+                <button class="btn secundario" id="btn-llamar-manual" type="submit">Llamar</button>
+              </form>
+            </section>
+            <section class="bloque">
+              <h2>Cómo vincular</h2>
+              <ol class="pasos">
+                <li>Instala y abre <strong>Phoenix Mobile</strong> en el teléfono Android.</li>
+                <li>Concede los permisos de llamadas, estado del teléfono y registro de llamadas. Los dos últimos permiten que la cola sepa cuándo terminó cada llamada.</li>
+                <li>Conecta el computador y el teléfono a la misma red Wi‑Fi.</li>
+                <li>Escribe la IP que aparece en el teléfono y pulsa «Probar conexión».</li>
+              </ol>
+              <p class="bajada">¿Sin teléfono a mano? Ejecuta <code>npm run simulador-movil</code> y usa la IP 127.0.0.1.</p>
+            </section>
+          </div>
+          <section class="bloque">
+            <header class="bloque-cab"><h2>Llamadas del mes</h2></header>
+            <div class="tabla-envoltura">
+              <table id="tabla-llamadas" class="tabla-compacta">
+                <thead><tr><th>Fecha</th><th>Cliente</th><th>Número</th><th>Resultado</th><th class="num">Duración</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <!-- =========================== CONFIGURACIÓN =========================== -->
+        <section class="vista" data-vista="config" hidden>
+          <header class="cabecera"><div><h1>Configuración</h1><p class="bajada" id="cfg-version"></p></div></header>
+          <div class="rejilla-dos">
+            <form class="bloque" id="form-config">
+              <h2>Metas y alertas</h2>
+              <label class="campo"><span>Meta de recuperación mensual</span><input id="cfg-meta" inputmode="numeric" placeholder="$ 0 (sin meta)" /></label>
+              <label class="campo"><span>Alertar clientes prioritarios sin gestión después de (días)</span><input id="cfg-dias" type="number" min="1" max="90" /></label>
+              <label class="campo"><span>Cerrar sesión tras minutos sin uso</span><input id="cfg-inactividad" type="number" min="5" max="480" /></label>
+              <div class="form-acciones"><button class="btn primario" type="submit">Guardar preferencias</button></div>
             </form>
-          </section>
-
-          <section class="bloque">
-            <h2>Cómo se conectan las piezas</h2>
-            <div class="diagrama" aria-label="Diagrama de arquitectura">
-              <div class="d-fila">
-                <div class="d-caja cliente">Ventana Electron<small>renderer</small></div>
-                <div class="d-caja cliente">Navegador u otro PC<small>http://…:3737</small></div>
+            <form class="bloque" id="form-password">
+              <h2>Cambiar contraseña</h2>
+              <label class="campo"><span>Contraseña actual</span><input id="pwd-actual" type="password" autocomplete="current-password" required /></label>
+              <label class="campo"><span>Nueva contraseña</span><input id="pwd-nueva" type="password" autocomplete="new-password" minlength="8" required /></label>
+              <label class="campo"><span>Repite la nueva contraseña</span><input id="pwd-repetir" type="password" autocomplete="new-password" minlength="8" required /></label>
+              <p class="bajada">Mínimo 8 caracteres, con letras y números.</p>
+              <div class="form-acciones"><button class="btn primario" type="submit">Cambiar contraseña</button></div>
+            </form>
+            <section class="bloque">
+              <h2>Respaldo de datos</h2>
+              <p class="bajada">Toda tu cartera, gestiones y reportes viven en este computador. Guarda un respaldo periódico en otra carpeta o unidad.</p>
+              <div class="acciones">
+                <button class="btn primario" id="btn-respaldar">Guardar respaldo</button>
+                <button class="btn texto peligro" id="btn-restaurar">Restaurar un respaldo</button>
               </div>
-              <div class="d-fila d-flechas"><span>IPC</span><span>HTTP / JSON</span></div>
-              <div class="d-fila"><div class="d-caja nucleo">Servicios del backend<small>cartera, importación y llamadas</small></div></div>
-              <div class="d-fila d-flechas"><span>SQL</span><span>Wi‑Fi :8765</span></div>
-              <div class="d-fila">
-                <div class="d-caja dato">SQLite local<small>phoenix_local.db</small></div>
-                <div class="d-caja movil">Phoenix Mobile<small>Android con SIM</small></div>
-              </div>
-            </div>
-            <p class="bajada separado">Para montar sólo el backend sin ventana: <code>npm run servidor</code>.</p>
-          </section>
-        </div>
-      </section>
-    </main>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
   </div>
+
+  <!-- ============================== DIÁLOGOS ============================== -->
+  <dialog id="dialogo-confirmar" class="dialogo">
+    <h2 id="confirmar-titulo"></h2>
+    <p id="confirmar-detalle" class="bajada"></p>
+    <div class="form-acciones"><button class="btn texto" id="confirmar-cancelar">Cancelar</button><button class="btn primario" id="confirmar-aceptar">Aceptar</button></div>
+  </dialog>
+
+  <dialog id="dialogo-masivo" class="dialogo">
+    <form id="form-masivo" method="dialog">
+      <h2 id="masivo-titulo">Cambiar estado</h2>
+      <label class="campo"><span>Nuevo estado</span><select id="masivo-estado"></select></label>
+      <p class="bajada" id="masivo-descripcion"></p>
+      <label class="campo" id="masivo-campo-fecha" hidden><span>Fecha del compromiso</span><input type="date" id="masivo-fecha" /></label>
+      <label class="campo"><span>Próxima gestión (opcional)</span><input type="date" id="masivo-proxima" /></label>
+      <label class="campo"><span>Comentario (queda en el historial de cada cliente)</span><textarea id="masivo-comentario" rows="3" maxlength="2000"></textarea></label>
+      <div class="form-acciones"><button class="btn texto" type="button" id="masivo-cancelar">Cancelar</button><button class="btn primario" type="submit">Aplicar</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="dialogo-reporte" class="dialogo">
+    <form id="form-reporte" method="dialog">
+      <h2 id="reporte-dialogo-titulo">Guardar reporte</h2>
+      <p class="bajada">Se guarda una fotografía de la cartera de este mes: indicadores, gráficos y el estado de cada cliente.</p>
+      <label class="campo"><span>Título</span><input id="reporte-titulo" maxlength="120" required /></label>
+      <label class="campo"><span>Notas (opcional)</span><textarea id="reporte-notas" rows="3" maxlength="2000" placeholder="Ej. corte de la primera quincena"></textarea></label>
+      <div class="form-acciones"><button class="btn texto" type="button" id="reporte-cancelar">Cancelar</button><button class="btn primario" type="submit">Guardar reporte</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="dialogo-llamada" class="dialogo">
+    <form id="form-llamada" method="dialog">
+      <h2>Cómo terminó la llamada</h2>
+      <p class="bajada" id="llamada-detalle"></p>
+      <label class="campo"><span>Resultado</span><select id="llamada-motivo"></select></label>
+      <div class="campo" id="llamada-campo-duracion">
+        <span>Duración de la conversación</span>
+        <div class="campo-duracion">
+          <label class="campo-en-linea"><input type="number" id="llamada-min" min="0" max="360" inputmode="numeric" /> min</label>
+          <label class="campo-en-linea"><input type="number" id="llamada-seg" min="0" max="59" inputmode="numeric" /> s</label>
+        </div>
+      </div>
+      <p class="bajada" id="llamada-nota">«Número no existe» saca ese teléfono de la cola. Puedes reactivarlo desde la ficha del cliente.</p>
+      <div class="form-acciones"><button class="btn texto" type="button" id="llamada-cancelar">Cancelar</button><button class="btn primario" type="submit">Guardar</button></div>
+    </form>
+  </dialog>
+
+  <!-- Recordatorios de vuelta de gestión -->
+  <div class="velo" id="velo-recordatorios" hidden></div>
+  <aside class="panel-lateral" id="panel-recordatorios" aria-label="Recordatorios" aria-hidden="true">
+    <header class="panel-lateral-cab">
+      <div><h2>Recordatorios</h2><p id="recordatorios-resumen"></p></div>
+      <button class="ficha-cerrar" id="recordatorios-cerrar" aria-label="Cerrar recordatorios">×</button>
+    </header>
+    <div class="panel-lateral-cuerpo" id="recordatorios-cuerpo"></div>
+  </aside>
+
+  <!-- Llamada manual en curso -->
+  <section class="llamada-manual" id="llamada-manual" hidden aria-live="polite"></section>
 
   <div class="avisos" id="avisos" aria-live="polite"></div>
 
   <script src="api.js"></script>
-  <script src="renderer.js"></script>
+  <script src="util.js"></script>
+  <script src="graficos.js"></script>
+  <script src="vista-dashboard.js"></script>
+  <script src="vista-clientes.js"></script>
+  <script src="vista-cola.js"></script>
+  <script src="vista-reportes.js"></script>
+  <script src="vista-importar.js"></script>
+  <script src="vista-telefono.js"></script>
+  <script src="vista-config.js"></script>
+  <script src="vista-recordatorios.js"></script>
+  <script src="movimiento.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

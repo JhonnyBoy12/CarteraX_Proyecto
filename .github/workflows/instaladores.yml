@@ -1,0 +1,87 @@
+# Compila los instaladores de CarteraX (Windows, macOS, Linux) y el APK de
+# Phoenix Mobile.
+#
+#  - Manual: pestaña Actions → "Instaladores" → Run workflow. Los archivos
+#    quedan como artefactos descargables del run.
+#  - Al subir una etiqueta de versión (git tag v0.3.0 && git push --tags) se
+#    crea además un Release en GitHub con todos los archivos adjuntos.
+name: Instaladores
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  escritorio:
+    name: CarteraX (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Pruebas
+        run: npm run prueba
+      - name: Empaquetar
+        run: npx electron-builder --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CarteraX-${{ runner.os }}
+          if-no-files-found: error
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+            release/*.deb
+
+  android:
+    name: Phoenix Mobile (APK)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: movil/android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Compilar APK
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+          cp app/build/outputs/apk/debug/app-debug.apk "PhoenixMobile-${GITHUB_REF_NAME}.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PhoenixMobile-APK
+          if-no-files-found: error
+          path: movil/android/PhoenixMobile-*.apk
+
+  publicar:
+    name: Publicar Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [escritorio, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artefactos
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artefactos/*
+          generate_release_notes: true

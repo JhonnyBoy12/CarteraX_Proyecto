@@ -1,20 +1,26 @@
 {
   "name": "carterax-fusion",
-  "version": "0.3.0-prototype",
-  "description": "CarteraX - prototipo fusionado con ETL, SQLite normalizado, Android y servidor HTTP",
+  "version": "0.3.1",
+  "description": "CarteraX Phoenix: gestiÃ³n de cartera y cobranza para ejecutivos, con cola de llamadas vÃ­a Phoenix Mobile",
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc && node scripts/copiar-assets.js",
     "start": "npm run build && electron .",
     "dev": "npm run build && electron .",
-    "servidor": "npm run build && node scripts/servidor.js",
     "simulador-movil": "node scripts/simulador-movil.js",
-    "prueba": "npm run build && node pruebas/cargador.prueba.js",
+    "prueba": "npm run build && node pruebas/cargador.prueba.js && node scripts/ejecutar-con-electron.js pruebas/servicios.prueba.js && node scripts/ejecutar-con-electron.js pruebas/importacion-segura.prueba.js",
     "ejemplos": "node scripts/generar-ejemplos.js",
+    "ejemplos:ficha": "node scripts/generar-ejemplo-ficha.js",
     "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux",
     "dist:dir": "npm run build && electron-builder --dir",
     "postinstall": "electron-rebuild -f -w better-sqlite3",
-    "prueba:importacion": "npm run build && node pruebas/importacion-segura.prueba.js"
+    "servidor": "npm run build:compatibilidad && node compatibilidad/main-anterior/scripts/servidor.js",
+    "build:compatibilidad": "tsc -p compatibilidad/main-anterior/tsconfig.json && node compatibilidad/main-anterior/scripts/copiar-assets.js",
+    "capturas": "npm run build && electron scripts/capturar-pantallas.js",
+    "prueba:importacion": "npm run build && node scripts/ejecutar-con-electron.js pruebas/importacion-segura.prueba.js"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.2.0",
@@ -31,14 +37,21 @@
   "build": {
     "appId": "cl.carterax.desktop",
     "productName": "CarteraX",
+    "copyright": "Proyecto Capstone Phoenix",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
     "files": [
       "dist/**/*",
+      "!dist/**/*.map",
       "package.json"
     ],
     "asar": true,
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**"
+    ],
+    "artifactName": "CarteraX-Phoenix-${version}-${os}-${arch}.${ext}",
     "win": {
       "target": [
         {
@@ -46,15 +59,48 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
         }
-      ]
+      ],
+      "icon": "build/icon.ico"
+    },
+    "portable": {
+      "artifactName": "CarteraX-Phoenix-${version}-portable.${ext}"
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "CarteraX"
+      "shortcutName": "CarteraX",
+      "artifactName": "CarteraX-Phoenix-${version}-instalador.${ext}",
+      "deleteAppDataOnUninstall": false
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.business",
+      "icon": "build/icon.png"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Office",
+      "icon": "build/icon.png",
+      "maintainer": "Equipo Phoenix"
     }
-  }
+  },
+  "productName": "CarteraX",
+  "author": "Jhonny Silva, Cristobal Irarrazabal, Diego Cruz",
+  "license": "UNLICENSED",
+  "private": true
 }

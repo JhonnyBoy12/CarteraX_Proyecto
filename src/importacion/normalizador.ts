@@ -181,6 +181,18 @@ export function limpiarFechaYYYYMMDD(valor: unknown): string | null {
 }
 
 /**
+ * Teléfono tal como lo carga el importador (8 o más dígitos, conserva `+`)
+ * o `null` si se descarta.
+ * @since 0.3.1 (antes era interno de importador.ts, mismo comportamiento)
+ */
+export function textoTelefono(valor: unknown): string | null {
+  const texto = limpiarTexto(valor);
+  if (!texto) return null;
+  const soloNumero = texto.replace(/\.0$/, "").replace(/[^0-9+]/g, "");
+  return soloNumero.length >= 8 ? soloNumero : null;
+}
+
+/**
  * Separa un RUT chileno escrito con dígito verificador (`"12.345.678-9"`,
  * `"12345678-K"`) en cuerpo y DV. Si el RUT no trae guion se devuelve tal
  * cual (caso de los Excel reales, donde el DV viene en `DDAS_DRT_PPAL`).

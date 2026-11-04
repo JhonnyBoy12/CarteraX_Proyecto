@@ -1,9 +1,6 @@
 /**
- * Copia los archivos no-TypeScript a dist/ después de `tsc`.
- * Reemplaza el `node -e "..."` en línea que tenía el script "build" en la
- * v0.1.0 (misma función, ahora mantenible y con más archivos).
- *
- * @since 0.2.0
+ * Copia a dist/ los archivos que no son TypeScript (esquema SQL, HTML,
+ * estilos, fuentes e íconos). Se ejecuta después de `tsc` en `npm run build`.
  */
 const fs = require("fs");
 const path = require("path");
@@ -13,11 +10,24 @@ const copias = [
   ["src/db/schema.sql", "dist/db/schema.sql"],
   ["src/renderer/index.html", "dist/renderer/index.html"],
   ["src/renderer/styles.css", "dist/renderer/styles.css"],
+  ["src/renderer/assets", "dist/renderer/assets"],
 ];
 
+// fs.cpSync de Node 22 falla al sobrescribir en carpetas de OneDrive
+// (unlink con código vacío); copyFileSync sobrescribe sin borrar antes.
+function copiar(o, d) {
+  if (fs.statSync(o).isDirectory()) {
+    fs.mkdirSync(d, { recursive: true });
+    for (const n of fs.readdirSync(o)) copiar(path.join(o, n), path.join(d, n));
+  } else {
+    fs.copyFileSync(o, d);
+  }
+}
+
 for (const [origen, destino] of copias) {
+  const o = path.join(raiz, origen);
   const d = path.join(raiz, destino);
   fs.mkdirSync(path.dirname(d), { recursive: true });
-  fs.copyFileSync(path.join(raiz, origen), d);
+  copiar(o, d);
   console.log(`  copiado ${origen} → ${destino}`);
 }

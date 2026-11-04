@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 440" role="img" aria-label="Vista de procesos: el renderer invoca al proceso principal por IPC asíncrono; el proceso principal accede a SQLite de forma síncrona y llama por HTTP al servidor de Phoenix Mobile, que atiende cada conexión en un hilo y delega en el hilo de interfaz." font-family="Archivo, Segoe UI, sans-serif">
+  <defs>
+    <marker id="f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" fill="#515C77"/></marker>
+    <marker id="fn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" fill="#DE762E"/></marker>
+  </defs>
+  <rect x="0" y="0" width="1000" height="440" fill="#FFFFFF"/>
+  <g font-size="12" fill="#16203A">
+    <!-- Renderer -->
+    <rect x="20" y="30" width="420" height="120" rx="8" fill="#F4F5F9" stroke="#515C77"/>
+    <text x="36" y="56" font-size="14" font-weight="700">Proceso renderer (Chromium)</text>
+    <text x="36" y="80">• vistas + app.ts en un hilo con event loop</text>
+    <text x="36" y="100">• sondeo de la cola cada 1,5 s · cierre por inactividad</text>
+    <text x="36" y="120">• contextIsolation, sin Node · CSP sólo 'self'</text>
+    <text x="36" y="140" fill="#515C77">window.phoenixAPI.invocar(canal, …)</text>
+
+    <!-- Main -->
+    <rect x="20" y="200" width="420" height="150" rx="8" fill="#FCEBDD" stroke="#DE762E" stroke-width="1.5"/>
+    <text x="36" y="226" font-size="14" font-weight="700">Proceso principal Electron (Node.js)</text>
+    <text x="36" y="250">• main.ts: ventana, menú, instancia única</text>
+    <text x="36" y="270">• ipcMain.handle → rutas.ts → servicios</text>
+    <text x="36" y="290">• estado en memoria: sesión, cola, seguimiento</text>
+    <text x="36" y="310">• better-sqlite3: consultas síncronas y transacciones</text>
+    <text x="36" y="330">• cliente HTTP con tiempo límite hacia el teléfono</text>
+
+    <rect x="120" y="384" width="220" height="40" rx="6" fill="#EEF0F5" stroke="#16203A"/>
+    <text x="230" y="409" text-anchor="middle" font-weight="700">carterax_fusion.db</text>
+
+    <!-- Android -->
+    <rect x="560" y="30" width="420" height="320" rx="8" fill="#F4F5F9" stroke="#172039" stroke-width="1.5"/>
+    <text x="576" y="56" font-size="14" font-weight="700">Proceso Phoenix Mobile (Android)</text>
+    <rect x="580" y="74" width="380" height="64" rx="6" fill="#172039"/>
+    <text x="596" y="98" font-weight="700" fill="#FFFFFF">Hilo de interfaz · MainActivity</text>
+    <text x="596" y="118" font-size="11.5" fill="#FCEBDD">enruta peticiones · ACTION_CALL · muestra el estado</text>
+    <rect x="580" y="170" width="380" height="64" rx="6" fill="#FFFFFF" stroke="#515C77"/>
+    <text x="596" y="194" font-weight="700">Pool de hilos · ServidorPhoenix</text>
+    <text x="596" y="214" font-size="11.5" fill="#515C77">ServerSocket :8765 · un hilo por conexión</text>
+    <rect x="580" y="266" width="380" height="64" rx="6" fill="#FFFFFF" stroke="#515C77"/>
+    <text x="596" y="290" font-weight="700">PhoneStateListener + CallLog</text>
+    <text x="596" y="310" font-size="11.5" fill="#515C77">detecta el fin de la llamada y su duración</text>
+  </g>
+
+  <g stroke="#515C77" stroke-width="1.4" fill="none">
+    <line x1="230" y1="150" x2="230" y2="197" marker-end="url(#f)" marker-start="url(#f)"/>
+    <line x1="230" y1="350" x2="230" y2="381" marker-end="url(#f)" marker-start="url(#f)"/>
+    <line x1="770" y1="170" x2="770" y2="141" marker-end="url(#f)"/>
+    <path d="M960 298 H970 V106 H963" marker-end="url(#f)"/>
+  </g>
+  <line x1="440" y1="275" x2="577" y2="205" stroke="#DE762E" stroke-width="1.8" marker-end="url(#fn)" marker-start="url(#fn)"/>
+  <g font-size="11" fill="#515C77" font-family="Archivo, Segoe UI, sans-serif">
+    <text x="240" y="172">IPC invoke (asíncrono,</text><text x="240" y="186">devuelve Promise)</text>
+    <text x="240" y="372">síncrono</text>
+    <text x="778" y="160">runOnUiThread</text>
+    <text x="462" y="290" fill="#A9520F">HTTP/JSON</text><text x="462" y="305" fill="#A9520F">petición-respuesta</text>
+  </g>
+</svg>

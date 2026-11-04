@@ -1,224 +1,108 @@
 /**
  * @file api.ts (renderer)
- * @description Adaptador de acceso al backend para la interfaz.
+ * @description Acceso tipado al backend. Cada método invoca un canal IPC
+ * (ver `ipc/rutas.ts`) a través de `window.phoenixAPI.invocar` y lanza
+ * `Error` si el backend responde `{ ok: false }`.
  *
- * La MISMA interfaz funciona en dos modos:
- *  - **electron**: dentro de la app de escritorio → usa `window.phoenixAPI`
- *    (IPC expuesto por `preload.ts`).
- *  - **web**: abierta desde un navegador apuntando al servidor HTTP
- *    (`http://localhost:3737` u otro PC) → usa `fetch('/api/...')`.
- *
- * El resto del renderer sólo usa el objeto global `Api` y no sabe en qué
- * modo está corriendo. Todas las funciones lanzan `Error` si el backend
- * responde `{ ok: false }`, por lo que la interfaz usa try/catch.
- *
- * Nota técnica: este archivo es un *script* (sin import/export) para que
- * funcione en el navegador sin empaquetador; comparte el ámbito global con
- * `renderer.ts`, que se carga después.
- *
- * @since 0.2.0
+ * Es un *script* global (sin import/export): lo comparten todas las vistas.
  */
 
-/** Métodos expuestos por `preload.ts` (modo electron). */
-interface PhoenixAPI {
-  login(email: string, password: string): Promise<Phoenix.Respuesta<Phoenix.UsuarioSesion>>;
-  obtenerSesion(): Promise<Phoenix.Respuesta<Phoenix.UsuarioSesion | null>>;
-  logout(): Promise<Phoenix.Respuesta<boolean>>;
-  elegirArchivoExcel(): Promise<string | null>;
-  importarExcel(ruta: string, periodoId?: string): Promise<{ ok: boolean; resultado?: Phoenix.ResultadoImportacion; error?: string }>;
-  obtenerResumen(periodoId?: string): Promise<Phoenix.ResumenCartera>;
-  obtenerHistorial(): Promise<Phoenix.ImportacionHistorial[]>;
-  previsualizarArchivo(ruta: string): Promise<Phoenix.Respuesta<Phoenix.PreviaArchivo>>;
+interface PuenteIpc {
+  invocar(canal: string, ...args: unknown[]): Promise<Phoenix.Respuesta<unknown>>;
   rutaDeArchivo(archivo: File): string;
-  listarClientes(filtro: Phoenix.FiltroClientes): Promise<Phoenix.Respuesta<Phoenix.PaginaClientes>>;
-  listarCategorias(periodoId?: string): Promise<Phoenix.Respuesta<string[]>>;
-  obtenerMovil(): Promise<Phoenix.Respuesta<{ ip: string | null }>>;
-  probarMovil(ip?: string): Promise<Phoenix.Respuesta<Phoenix.EstadoMovil>>;
-  llamarMovil(numero: string, clienteId?: string | null): Promise<Phoenix.Respuesta<Phoenix.ResultadoLlamada>>;
-  listarLlamadas(): Promise<Phoenix.Respuesta<Phoenix.LlamadaRegistrada[]>>;
-  estadoCola(): Promise<Phoenix.Respuesta<Phoenix.EstadoColaLlamadas>>;
-  llamarSiguienteCola(): Promise<Phoenix.Respuesta<Phoenix.ResultadoColaLlamadas>>;
-  iniciarCola(): Promise<Phoenix.Respuesta<Phoenix.EstadoColaLlamadas>>;
-  actualizarCola(): Promise<Phoenix.Respuesta<Phoenix.EstadoColaLlamadas>>;
-  detenerCola(): Promise<Phoenix.Respuesta<Phoenix.EstadoColaLlamadas>>;
-  estadoServidor(): Promise<Phoenix.Respuesta<Phoenix.EstadoServidor>>;
-  configurarServidor(config: Partial<Phoenix.ConfigServidor>): Promise<Phoenix.Respuesta<Phoenix.EstadoServidor>>;
-  abrirExterno(url: string): Promise<Phoenix.Respuesta<boolean>>;
 }
 
-/**
- * Archivo elegido por el usuario. En Electron se trabaja con la `ruta`;
- * en web con el objeto `File` (se sube al servidor).
- */
-interface ArchivoSeleccionado {
-  nombre: string;
-  ruta?: string;
-  archivo?: File;
-}
+const puente = (window as unknown as { phoenixAPI?: PuenteIpc }).phoenixAPI;
 
-/** Contrato único que usa la interfaz, independiente del modo. */
-interface ClienteBackend {
-  login(email: string, password: string): Promise<Phoenix.UsuarioSesion>;
-  sesion(): Promise<Phoenix.UsuarioSesion | null>;
-  logout(): Promise<void>;
-  modo: "electron" | "web";
-  elegirArchivo(): Promise<ArchivoSeleccionado | null>;
-  desdeArchivoSoltado(archivo: File): ArchivoSeleccionado;
-  previsualizar(a: ArchivoSeleccionado): Promise<Phoenix.PreviaArchivo>;
-  importar(a: ArchivoSeleccionado, periodoId?: string): Promise<Phoenix.ResultadoImportacion>;
-  resumen(periodoId?: string): Promise<Phoenix.ResumenCartera>;
-  historial(): Promise<Phoenix.ImportacionHistorial[]>;
-  clientes(filtro: Phoenix.FiltroClientes): Promise<Phoenix.PaginaClientes>;
-  categorias(periodoId?: string): Promise<string[]>;
-  movil(): Promise<{ ip: string | null }>;
-  probarMovil(ip?: string): Promise<Phoenix.EstadoMovil>;
-  llamar(numero: string, clienteId?: string | null): Promise<Phoenix.ResultadoLlamada>;
-  llamadas(): Promise<Phoenix.LlamadaRegistrada[]>;
-  estadoCola(): Promise<Phoenix.EstadoColaLlamadas>;
-  llamarSiguienteCola(): Promise<Phoenix.ResultadoColaLlamadas>;
-  iniciarCola(): Promise<Phoenix.EstadoColaLlamadas>;
-  actualizarCola(): Promise<Phoenix.EstadoColaLlamadas>;
-  detenerCola(): Promise<Phoenix.EstadoColaLlamadas>;
-  servidor(): Promise<Phoenix.EstadoServidor>;
-  configurarServidor(config: Partial<Phoenix.ConfigServidor>): Promise<Phoenix.EstadoServidor>;
-  abrirExterno(url: string): Promise<void>;
-}
+/** Se dispara cuando el backend informa que la sesión expiró. */
+let alExpirarSesion: (() => void) | null = null;
 
-/** Extensiones que acepta el selector en modo web (igual que el backend). */
-const ACEPTA_ARCHIVOS = ".xlsx,.xls,.xlsm,.ods,.csv,.tsv,.txt";
-
-/**
- * Extrae `datos` de una respuesta `{ ok, datos, error }` o lanza el error.
- * @param r Respuesta del backend.
- */
-function desenvolver<T>(r: Phoenix.Respuesta<T>): T {
-  if (!r.ok) throw new Error(r.error ?? "Error desconocido del backend");
+async function invocar<T>(canal: string, ...args: unknown[]): Promise<T> {
+  if (!puente) throw new Error("La interfaz debe abrirse desde la aplicación de escritorio CarteraX.");
+  const r = await puente.invocar(canal, ...args);
+  if (!r.ok) {
+    if (r.error?.startsWith("Tu sesión expiró")) alExpirarSesion?.();
+    throw new Error(r.error ?? "Error desconocido");
+  }
   return r.datos as T;
 }
 
-/**
- * Cliente para modo electron (IPC vía `window.phoenixAPI`).
- * @param ipc Objeto expuesto por preload.
- */
-function crearClienteElectron(ipc: PhoenixAPI): ClienteBackend {
-  return {
-    login: async (email, password) => desenvolver(await ipc.login(email, password)),
-    sesion: async () => desenvolver(await ipc.obtenerSesion()),
-    logout: async () => void desenvolver(await ipc.logout()),
-    modo: "electron",
-    async elegirArchivo() {
-      const ruta = await ipc.elegirArchivoExcel();
-      return ruta ? { nombre: ruta.split(/[\\/]/).pop() ?? ruta, ruta } : null;
-    },
-    desdeArchivoSoltado: (archivo) => ({ nombre: archivo.name, ruta: ipc.rutaDeArchivo(archivo) }),
-    previsualizar: async (a) => desenvolver(await ipc.previsualizarArchivo(a.ruta!)),
-    async importar(a, periodoId) {
-      const r = await ipc.importarExcel(a.ruta!, periodoId);
-      if (!r.ok) throw new Error(r.error);
-      return r.resultado!;
-    },
-    resumen: (periodoId) => ipc.obtenerResumen(periodoId),
-    historial: () => ipc.obtenerHistorial(),
-    clientes: async (f) => desenvolver(await ipc.listarClientes(f)),
-    categorias: async (periodoId) => desenvolver(await ipc.listarCategorias(periodoId)),
-    movil: async () => desenvolver(await ipc.obtenerMovil()),
-    probarMovil: async (ip) => desenvolver(await ipc.probarMovil(ip)),
-    llamar: async (n, id) => desenvolver(await ipc.llamarMovil(n, id ?? null)),
-    llamadas: async () => desenvolver(await ipc.listarLlamadas()),
-    estadoCola: async () => desenvolver(await ipc.estadoCola()),
-    llamarSiguienteCola: async () => desenvolver(await ipc.llamarSiguienteCola()),
-    iniciarCola: async () => desenvolver(await ipc.iniciarCola()),
-    actualizarCola: async () => desenvolver(await ipc.actualizarCola()),
-    detenerCola: async () => desenvolver(await ipc.detenerCola()),
-    servidor: async () => desenvolver(await ipc.estadoServidor()),
-    configurarServidor: async (c) => desenvolver(await ipc.configurarServidor(c)),
-    abrirExterno: async (url) => void desenvolver(await ipc.abrirExterno(url)),
-  };
-}
+type ContextoLogin = Phoenix.Contexto & { cierresGenerados: number };
 
-/**
- * Cliente para modo web (HTTP hacia `servidorHttp.ts`).
- * Envía siempre `X-Phoenix-Cliente` (protección CSRF) y, si la página se
- * abrió con `?token=...`, la cabecera `Authorization`.
- */
-function crearClienteWeb(): ClienteBackend {
-  const token = new URLSearchParams(location.search).get("token");
+const Api = {
+  // Sesión
+  login: (email: string, password: string) => invocar<ContextoLogin>("auth:login", email, password),
+  sesion: () => invocar<Phoenix.Contexto | null>("auth:sesion"),
+  logout: (motivo?: "inactividad") => invocar<boolean>("auth:logout", motivo),
+  cambiarPassword: (actual: string, nueva: string) => invocar<boolean>("auth:cambiar-password", actual, nueva),
 
-  /** Petición genérica a la API. */
-  async function pedir<T>(ruta: string, init: RequestInit = {}): Promise<T> {
-    const cabeceras: Record<string, string> = { "X-Phoenix-Cliente": "web", ...(init.headers as Record<string, string>) };
-    if (token) cabeceras.Authorization = `Bearer ${token}`;
-    const res = await fetch(ruta, { ...init, headers: cabeceras });
-    let cuerpo: Phoenix.Respuesta<T>;
-    try {
-      cuerpo = await res.json();
-    } catch {
-      throw new Error(`El servidor respondió HTTP ${res.status} sin JSON`);
-    }
-    return desenvolver(cuerpo);
-  }
+  // Contexto
+  contexto: () => invocar<Phoenix.Contexto>("contexto:obtener"),
+  cambiarPeriodo: (id: string) => invocar<Phoenix.Contexto>("contexto:cambiar-periodo", id),
+  estados: () => invocar<Phoenix.EstadoCobranza[]>("catalogo:estados"),
 
-  /** POST con cuerpo JSON. */
-  const postJson = <T>(ruta: string, datos: unknown) =>
-    pedir<T>(ruta, { method: "POST", body: JSON.stringify(datos), headers: { "Content-Type": "application/json" } });
+  // Importación
+  elegirArchivo: () => invocar<string | null>("importacion:elegir"),
+  rutaDeArchivo: (f: File) => (puente ? puente.rutaDeArchivo(f) : ""),
+  previsualizar: (ruta: string) => invocar<Phoenix.PreviaArchivo>("importacion:previsualizar", ruta),
+  importar: (ruta: string, periodoId: string) =>
+    invocar<{ resultado: Phoenix.ResultadoImportacion; contexto: Phoenix.Contexto }>("importacion:ejecutar", ruta, periodoId),
+  historialImportaciones: () => invocar<Phoenix.ImportacionHistorial[]>("importacion:historial"),
+  exportarObservaciones: (ruta: string) => invocar<Phoenix.ArchivoGuardado | null>("importacion:exportar-observaciones", ruta),
 
-  /** POST subiendo el archivo crudo. */
-  const subir = <T>(ruta: string, a: ArchivoSeleccionado) =>
-    pedir<T>(ruta, {
-      method: "POST",
-      body: a.archivo!,
-      headers: { "X-Nombre-Archivo": encodeURIComponent(a.nombre), "Content-Type": "application/octet-stream" },
-    });
+  // Clientes
+  clientes: (f: Phoenix.FiltroClientes) => invocar<Phoenix.PaginaClientes>("clientes:listar", f),
+  opcionesFiltro: () => invocar<Phoenix.OpcionesFiltro>("clientes:opciones"),
+  detalle: (id: string) => invocar<Phoenix.DetalleCliente>("clientes:detalle", id),
+  gestionar: (s: Phoenix.SolicitudGestion) => invocar<Phoenix.ResultadoGestion>("clientes:gestionar", s),
+  marcarTelefono: (id: string, valido: boolean) => invocar<boolean>("clientes:telefono", id, valido),
+  exportarClientes: (f: Phoenix.FiltroClientes, formato: "xlsx" | "csv") =>
+    invocar<Phoenix.ArchivoGuardado | null>("clientes:exportar", f, formato),
 
-  return {
-    login: () => Promise.reject(new Error("El inicio de sesión está disponible en la aplicación de escritorio.")),
-    sesion: () => Promise.resolve(null),
-    logout: () => Promise.resolve(),
-    modo: "web",
-    elegirArchivo() {
-      return new Promise((resolve) => {
-        const input = document.createElement("input");
-        input.type = "file";
-        input.accept = ACEPTA_ARCHIVOS;
-        input.addEventListener("change", () => {
-          const f = input.files?.[0];
-          resolve(f ? { nombre: f.name, archivo: f } : null);
-        });
-        input.addEventListener("cancel", () => resolve(null));
-        input.click();
-      });
-    },
-    desdeArchivoSoltado: (archivo) => ({ nombre: archivo.name, archivo }),
-    previsualizar: (a) => subir("/api/importar/previsualizar", a),
-    importar: (a, periodoId) => subir(`/api/importar${periodoId ? `?periodoId=${encodeURIComponent(periodoId)}` : ""}`, a),
-    resumen: (periodoId) => pedir(`/api/resumen${periodoId ? `?periodoId=${encodeURIComponent(periodoId)}` : ""}`),
-    historial: () => pedir("/api/historial"),
-    clientes(f) {
-      const q = new URLSearchParams();
-      if (f.periodoId) q.set("periodoId", f.periodoId);
-      if (f.texto) q.set("texto", f.texto);
-      if (f.categoria) q.set("categoria", f.categoria);
-      q.set("pagina", String(f.pagina ?? 1));
-      q.set("porPagina", String(f.porPagina ?? 50));
-      return pedir(`/api/clientes?${q}`);
-    },
-    categorias: (periodoId) => pedir(`/api/categorias${periodoId ? `?periodoId=${encodeURIComponent(periodoId)}` : ""}`),
-    movil: () => pedir("/api/movil"),
-    probarMovil: (ip) => postJson("/api/movil/probar", { ip }),
-    llamar: (numero, clienteId) => postJson("/api/movil/llamar", { numero, clienteId: clienteId ?? null }),
-    llamadas: () => pedir("/api/movil/llamadas"),
-    estadoCola: () => Promise.reject(new Error("La cola de llamadas se controla desde la app de escritorio.")),
-    llamarSiguienteCola: () => Promise.reject(new Error("La cola de llamadas se controla desde la app de escritorio.")),
-    iniciarCola: () => Promise.reject(new Error("La cola de llamadas se controla desde la app de escritorio.")),
-    actualizarCola: () => Promise.reject(new Error("La cola de llamadas se controla desde la app de escritorio.")),
-    detenerCola: () => Promise.reject(new Error("La cola de llamadas se controla desde la app de escritorio.")),
-    servidor: () => pedir("/api/servidor"),
-    configurarServidor: () => Promise.reject(new Error("La configuración del servidor sólo se cambia desde la app de escritorio.")),
-    abrirExterno: async (url) => void window.open(url, "_blank", "noopener"),
-  };
-}
+  // Dashboard y reportes
+  dashboard: () => invocar<Phoenix.Dashboard>("dashboard:obtener"),
+  reportes: () => invocar<Phoenix.ReporteResumen[]>("reportes:listar"),
+  generarReporte: (titulo: string, notas: string) => invocar<Phoenix.ReporteResumen>("reportes:generar", titulo, notas),
+  reporte: (id: string) => invocar<Phoenix.ReporteDetalle>("reportes:obtener", id),
+  eliminarReporte: (id: string) => invocar<boolean>("reportes:eliminar", id),
+  descargarReporte: (id: string, formato: Phoenix.FormatoDescarga) =>
+    invocar<Phoenix.ArchivoGuardado | null>("reportes:descargar", id, formato),
 
-/** Instancia global usada por `renderer.ts`. */
-const Api: ClienteBackend = (window as unknown as { phoenixAPI?: PhoenixAPI }).phoenixAPI
-  ? crearClienteElectron((window as unknown as { phoenixAPI: PhoenixAPI }).phoenixAPI)
-  : crearClienteWeb();
+  // Teléfono
+  movil: () => invocar<{ ip: string | null }>("movil:obtener"),
+  probarMovil: (ip?: string) => invocar<Phoenix.EstadoMovil>("movil:probar", ip),
+  llamar: (numero: string, clienteId?: string | null) =>
+    invocar<Phoenix.ResultadoLlamada & { seguimiento?: Phoenix.SeguimientoLlamada | null }>("movil:llamar", numero, clienteId ?? null),
+  llamadas: () => invocar<Phoenix.LlamadaRegistrada[]>("movil:llamadas"),
+  seguimientoLlamada: () => invocar<Phoenix.SeguimientoLlamada | null>("movil:seguimiento"),
+  terminarLlamada: (motivo: Phoenix.MotivoLlamada, duracion: number | null) =>
+    invocar<Phoenix.SeguimientoLlamada | null>("movil:terminar-llamada", motivo, duracion),
+  descartarSeguimiento: () => invocar<boolean>("movil:descartar-seguimiento"),
+  corregirLlamada: (id: string, motivo: Phoenix.MotivoLlamada, duracion?: number | null) =>
+    invocar<boolean>("movil:corregir-llamada", id, motivo, duracion),
+
+  // Recordatorios
+  recordatorios: () => invocar<Phoenix.Recordatorio[]>("recordatorios:listar"),
+  recordatoriosAvisar: () => invocar<Phoenix.Recordatorio[]>("recordatorios:avisar"),
+  posponerRecordatorio: (id: string, fechaHora: string) => invocar<boolean>("recordatorios:posponer", id, fechaHora),
+  resolverRecordatorio: (id: string, estado: "HECHO" | "DESCARTADO") => invocar<boolean>("recordatorios:resolver", id, estado),
+
+  // Cola
+  cola: () => invocar<Phoenix.EstadoColaLlamadas>("cola:estado"),
+  colaIniciar: () => invocar<Phoenix.EstadoColaLlamadas>("cola:iniciar"),
+  colaActualizar: () => invocar<Phoenix.EstadoColaLlamadas>("cola:actualizar"),
+  colaPausar: () => invocar<Phoenix.EstadoColaLlamadas>("cola:pausar"),
+  colaReanudar: () => invocar<Phoenix.EstadoColaLlamadas>("cola:reanudar"),
+  colaDetener: () => invocar<Phoenix.EstadoColaLlamadas>("cola:detener"),
+  colaSaltar: () => invocar<Phoenix.EstadoColaLlamadas>("cola:saltar"),
+  colaFinalizar: (resultado: boolean | Phoenix.MotivoLlamada) => invocar<Phoenix.EstadoColaLlamadas>("cola:finalizar-llamada", resultado),
+  colaCorregirIntento: (motivo: Phoenix.MotivoLlamada) => invocar<Phoenix.EstadoColaLlamadas>("cola:corregir-intento", motivo),
+  colaResultado: (r: Phoenix.ResultadoCola) => invocar<Phoenix.EstadoColaLlamadas>("cola:registrar-resultado", r),
+
+  // Configuración y respaldo
+  config: () => invocar<Phoenix.ConfigApp>("config:obtener"),
+  guardarConfig: (c: Partial<Phoenix.ConfigApp>) => invocar<Phoenix.ConfigApp>("config:guardar", c),
+  respaldar: () => invocar<Phoenix.ArchivoGuardado | null>("respaldo:crear"),
+  restaurar: () => invocar<boolean | null>("respaldo:restaurar"),
+  mostrarArchivo: (ruta: string) => invocar<boolean>("sistema:mostrar-archivo", ruta),
+};

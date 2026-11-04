@@ -8,10 +8,12 @@ import { createHash, randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 
 import { mapearFilas } from "./mapeoColumnas";
-import { limpiarTexto, limpiarNumero, limpiarFechaYYYYMMDD, separarRut } from "./normalizador";
+import { limpiarTexto, limpiarNumero, limpiarFechaYYYYMMDD, separarRut, textoTelefono } from "./normalizador";
 import { calcularDiasMora, calcularPctRecuperacion } from "./calculos";
 import { clasificarGestion } from "./clasificador";
 import { leerArchivoTabular } from "./lectorArchivos";
+import { estadoInicialDesdeCategoria } from "../dominio/estados";
+import { asegurarCartera, Contexto } from "../servicios/servicioPeriodos";
 
 export interface ResultadoHoja {
   hoja: string;
@@ -24,57 +26,7 @@ export interface ResultadoImportacion {
   archivo: string;
   hojas: ResultadoHoja[];
   formato?: Phoenix.FormatoArchivo;
-}
-
-function periodoActual(): { id: string; nombre: string; inicio: string; fin: string } {
-  const ahora = new Date();
-  const anio = ahora.getFullYear();
-  const mes = ahora.getMonth() + 1;
-  const id = `${anio}-${String(mes).padStart(2, "0")}`;
-  const inicio = `${id}-01`;
-  const ultimoDia = new Date(anio, mes, 0).getDate();
-  const fin = `${id}-${String(ultimoDia).padStart(2, "0")}`;
-  return { id, nombre: id, inicio, fin };
-}
-
-/**
- * El prototipo todavía no tiene login. Se crea un ejecutivo local para poder
- * probar cartera, importaciones y llamadas sin introducir un rol adicional.
- */
-function asegurarContextoLocal(db: Database.Database, periodoSolicitado?: string): { usuarioId: string; periodoId: string; carteraId: string } {
-  const usuarioId = "ejecutivo-local";
-  const periodo = periodoSolicitado ? periodoDesdeId(periodoSolicitado) : periodoActual();
-  const carteraId = `cartera-${usuarioId}-${periodo.id}`;
-
-  db.prepare(`INSERT OR IGNORE INTO usuarios (id, nombre, apellido, email, password_hash)
-              VALUES (?, 'Ejecutivo', 'Local', 'ejecutivo.local@carterax.local', 'PENDIENTE_LOGIN')`)
-    .run(usuarioId);
-
-  db.prepare(`INSERT OR IGNORE INTO periodos (id, nombre, fecha_inicio, fecha_fin)
-              VALUES (?, ?, ?, ?)`)
-    .run(periodo.id, periodo.nombre, periodo.inicio, periodo.fin);
-
-  db.prepare(`INSERT OR IGNORE INTO carteras (id, usuario_id, periodo_id, nombre)
-              VALUES (?, ?, ?, ?)`)
-    .run(carteraId, usuarioId, periodo.id, `Cartera ${periodo.nombre}`);
-
-  return { usuarioId, periodoId: periodo.id, carteraId };
-}
-
-function periodoDesdeId(id: string): { id: string; nombre: string; inicio: string; fin: string } {
-  if (!/^\d{4}-\d{2}$/.test(id)) throw new Error("El período seleccionado no es válido.");
-  const [anio, mes] = id.split("-").map(Number);
-  if (mes < 1 || mes > 12) throw new Error("El período seleccionado no es válido.");
-  const inicio = `${id}-01`;
-  const fin = `${id}-${String(new Date(anio, mes, 0).getDate()).padStart(2, "0")}`;
-  return { id, nombre: id, inicio, fin };
-}
-
-function textoTelefono(valor: unknown): string | null {
-  const texto = limpiarTexto(valor);
-  if (!texto) return null;
-  const soloNumero = texto.replace(/\.0$/, "").replace(/[^0-9+]/g, "");
-  return soloNumero.length >= 8 ? soloNumero : null;
+  periodoId?: string;
 }
 
 /** Calcula una huella SHA-256 del contenido para detectar el mismo archivo aunque cambie de nombre. */
@@ -82,15 +34,18 @@ function calcularHashArchivo(rutaArchivo: string): string {
   return createHash("sha256").update(fs.readFileSync(rutaArchivo)).digest("hex");
 }
 
+/**
+ * Importa un archivo a la cartera del ejecutivo para el mes indicado
+ * (RF-07 a RF-15). Si el cliente ya existe se actualizan sus datos de
+ * contacto, pero su estado ejecutivo del mes NO se sobrescribe.
+ */
 export function importarArchivo(
   db: Database.Database,
   rutaArchivo: string,
-  _usuarioId: string | null = null,
-  nombreOriginal?: string,
-  periodoId?: string
+  ctx: Contexto,
+  nombreOriginal?: string
 ): ResultadoImportacion {
   const leido = leerArchivoTabular(rutaArchivo, nombreOriginal);
-
   // Protección previa al reemplazo: nunca borrar una cartera existente si el
   // archivo no contiene ni una sola fila con un RUT que pueda convertirse en
   // identificador. La vista previa ayuda al usuario, pero esta validación debe
@@ -111,12 +66,22 @@ export function importarArchivo(
     throw new Error("Importación cancelada: no se encontró ninguna fila con un RUT utilizable. La cartera existente no se modificó.");
   }
 
-  const contexto = asegurarContextoLocal(db, periodoId);
+  const contexto = { usuarioId: ctx.usuarioId, periodoId: ctx.periodoId, carteraId: asegurarCartera(db, ctx) };
   const archivoHash = calcularHashArchivo(rutaArchivo);
 
-  // Se permite volver a importar el mismo archivo: la carga reemplaza los datos
-  // del período, pero cada ejecución queda registrada en el historial.
-  const resultado: ResultadoImportacion = { archivo: leido.archivo, hojas: [], formato: leido.formato };
+  const importacionExistente = db.prepare(`
+    SELECT nombre_archivo, fecha_importacion
+    FROM importaciones
+    WHERE cartera_id = ? AND archivo_hash = ?
+    LIMIT 1
+  `).get(contexto.carteraId, archivoHash) as { nombre_archivo: string; fecha_importacion: string } | undefined;
+
+  if (importacionExistente) {
+    throw new Error(
+      `Este archivo ya fue importado anteriormente (${importacionExistente.nombre_archivo}, ${importacionExistente.fecha_importacion}).`
+    );
+  }
+  const resultado: ResultadoImportacion = { archivo: leido.archivo, hojas: [], formato: leido.formato, periodoId: ctx.periodoId };
 
   const buscarCliente = db.prepare(`SELECT id FROM clientes WHERE rut = ? AND COALESCE(dv, '') = COALESCE(?, '') LIMIT 1`);
   const insertarCliente = db.prepare(`INSERT INTO clientes (id, rut, dv, nombre) VALUES (?, ?, ?, ?)`);
@@ -125,15 +90,26 @@ export function importarArchivo(
   const insertarCorreo = db.prepare(`INSERT OR IGNORE INTO correos (id, cliente_id, correo) VALUES (?, ?, ?)`);
   const insertarDireccion = db.prepare(`INSERT OR IGNORE INTO direcciones (id, cliente_id, direccion, comuna) VALUES (?, ?, ?, ?)`);
   const insertarVehiculo = db.prepare(`INSERT OR IGNORE INTO vehiculos (id, cliente_id, marca, modelo, patente) VALUES (?, ?, ?, ?, ?)`);
-  const insertarCarteraCliente = db.prepare(`INSERT OR IGNORE INTO cartera_clientes (id, cartera_id, cliente_id, categoria_gestion, texto_gestion) VALUES (?, ?, ?, ?, ?)`);
+  const insertarCarteraCliente = db.prepare(`INSERT OR IGNORE INTO cartera_clientes (id, cartera_id, cliente_id, categoria_gestion, texto_gestion, estado_cobranza) VALUES (?, ?, ?, ?, ?, ?)`);
   const actualizarGestion = db.prepare(`UPDATE cartera_clientes SET categoria_gestion = ?, texto_gestion = ?, updated_at = CURRENT_TIMESTAMP WHERE cartera_id = ? AND cliente_id = ?`);
+  // Reimportar el mismo mes ACTUALIZA la operación (deuda, cuotas, mora)
+  // en vez de duplicarla.
   const insertarOperacion = db.prepare(`
-    INSERT OR IGNORE INTO operaciones (
+    INSERT INTO operaciones (
       id, cliente_id, periodo_id, numero_operacion, deuda_total, monto_contenido,
       monto_cuota, cuotas_pactadas, cuotas_pagadas, cuotas_morosas,
       fecha_otorgamiento, fecha_primer_vencimiento, fecha_ultimo_pago,
       dias_mora, tramo_mora, pct_recuperacion
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(numero_operacion, periodo_id) DO UPDATE SET
+      deuda_total = excluded.deuda_total, monto_contenido = excluded.monto_contenido,
+      monto_cuota = excluded.monto_cuota, cuotas_pactadas = excluded.cuotas_pactadas,
+      cuotas_pagadas = excluded.cuotas_pagadas, cuotas_morosas = excluded.cuotas_morosas,
+      fecha_otorgamiento = excluded.fecha_otorgamiento, fecha_primer_vencimiento = excluded.fecha_primer_vencimiento,
+      fecha_ultimo_pago = excluded.fecha_ultimo_pago, dias_mora = excluded.dias_mora,
+      tramo_mora = excluded.tramo_mora, pct_recuperacion = excluded.pct_recuperacion,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE operaciones.cliente_id = excluded.cliente_id
   `);
   const insertarImportacion = db.prepare(`
     INSERT INTO importaciones (
@@ -146,7 +122,6 @@ export function importarArchivo(
     VALUES (?, ?, ?, ?, ?, ?)
   `);
 
-  let carteraReemplazada = false;
   for (const tabla of leido.tablas) {
     if (tabla.filas.length === 0) continue;
 
@@ -156,16 +131,10 @@ export function importarArchivo(
     let corregidos = 0;
     let conError = 0;
     const errores: Array<{ fila: number; campo: string; valor: string | null; descripcion: string }> = [];
+    // Operaciones sin número: clave estable por RUT para que reimportar no duplique.
+    const sinNumeroPorRut = new Map<string, number>();
 
     const procesar = db.transaction(() => {
-      if (!carteraReemplazada) {
-        // Reemplaza únicamente los datos operativos de esta cartera y período.
-        // Las tablas de importaciones y gestiones no se eliminan para mantener trazabilidad.
-        db.prepare(`DELETE FROM operaciones WHERE periodo_id = ? AND cliente_id IN (SELECT cliente_id FROM cartera_clientes WHERE cartera_id = ?)`).run(contexto.periodoId, contexto.carteraId);
-        db.prepare("DELETE FROM cartera_clientes WHERE cartera_id = ?").run(contexto.carteraId);
-        carteraReemplazada = true;
-      }
-
       filas.forEach((fila, indice) => {
         const numeroFila = indice + 2;
         try {
@@ -192,7 +161,7 @@ export function importarArchivo(
 
           const textoGestion = limpiarTexto(fila.texto_gestion);
           const categoriaGestion = clasificarGestion(textoGestion);
-          insertarCarteraCliente.run(randomUUID(), contexto.carteraId, clienteId, categoriaGestion, textoGestion);
+          insertarCarteraCliente.run(randomUUID(), contexto.carteraId, clienteId, categoriaGestion, textoGestion, estadoInicialDesdeCategoria(categoriaGestion));
           actualizarGestion.run(categoriaGestion, textoGestion, contexto.carteraId, clienteId);
 
           ["fono1", "fono2", "fono3", "fono4"].forEach((campo, prioridad) => {
@@ -207,7 +176,8 @@ export function importarArchivo(
 
           const direccion = limpiarTexto(fila.calle1);
           const comuna = limpiarTexto(fila.comuna);
-          if (direccion) insertarDireccion.run(randomUUID(), clienteId, direccion, comuna);
+          // La comuna se guarda aunque el archivo no traiga calle (filtro por comuna).
+          if (direccion || comuna) insertarDireccion.run(randomUUID(), clienteId, direccion ?? "", comuna);
 
           const marca = limpiarTexto(fila.marca);
           const modelo = limpiarTexto(fila.modelo);
@@ -218,7 +188,12 @@ export function importarArchivo(
           const cuotasPactadas = limpiarNumero(fila.cuotas_pactadas);
           const cuotasPagadas = limpiarNumero(fila.cuotas_pagadas);
           const operacionCruda = limpiarTexto(fila.numero_operacion);
-          const numeroOperacion = operacionCruda || `SIN-OPERACION-${importacionId}-${numeroFila}`;
+          let numeroOperacion = operacionCruda;
+          if (!numeroOperacion) {
+            const n = (sinNumeroPorRut.get(rut) ?? 0) + 1;
+            sinNumeroPorRut.set(rut, n);
+            numeroOperacion = `SIN-OPERACION-${rut}-${n}`;
+          }
 
           insertarOperacion.run(
             randomUUID(), clienteId, contexto.periodoId, numeroOperacion,
@@ -260,13 +235,4 @@ export function importarArchivo(
   }
 
   return resultado;
-}
-
-export function importarExcel(
-  db: Database.Database,
-  rutaExcel: string,
-  usuarioId: string | null = null,
-  periodoId?: string
-): ResultadoImportacion {
-  return importarArchivo(db, rutaExcel, usuarioId, undefined, periodoId);
 }

@@ -10,8 +10,9 @@
  * @since 0.2.0
  */
 import { leerArchivoTabular } from "./lectorArchivos";
-import { asignarCampos } from "./mapeoColumnas";
+import { asignarCampos, mapearFilas } from "./mapeoColumnas";
 import { limpiarTexto } from "./normalizador";
+import { validarFilas } from "./validador";
 
 /**
  * Convierte valores no serializables (Date) a texto para enviarlos por IPC/HTTP.
@@ -53,12 +54,21 @@ export function previsualizarArchivo(
         ? t.filas.filter((f) => colRut.every((c) => !limpiarTexto(f[c]))).length
         : t.filas.length;
 
+      // Revisión fila a fila; las marcas usan el encabezado original para
+      // poder señalar la celda en la muestra.
+      const validacion = validarFilas(mapearFilas(t.filas), new Set(campos.filter((c): c is string => !!c)));
+      const original = new Map(columnas.filter((c) => c.campo).map((c) => [c.campo as string, c.original]));
+      for (const [fila, lista] of Object.entries(validacion.marcas)) {
+        validacion.marcas[Number(fila)] = lista.map((c) => original.get(c) ?? c);
+      }
+
       return {
         hoja: t.nombre,
         totalFilas: t.filas.length,
         filasSinRut,
         columnas,
         muestra: t.filas.slice(0, filasMuestra).map(serializarFila),
+        validacion,
       };
     });
 
@@ -69,4 +79,19 @@ export function previsualizarArchivo(
     codificacion: leido.codificacion,
     hojas,
   };
+}
+
+/**
+ * Todas las observaciones del archivo, fila por fila, para descargarlas y
+ * corregir el origen (sin el límite de ejemplos de la vista previa).
+ * @since 0.3.1
+ */
+export function observacionesArchivo(ruta: string): Array<{ hoja: string; observacion: Phoenix.ObservacionImportacion }> {
+  const leido = leerArchivoTabular(ruta);
+  return leido.tablas
+    .filter((t) => t.filas.length > 0)
+    .flatMap((t) => {
+      const campos = new Set(asignarCampos(t.encabezados).filter((c): c is string => !!c));
+      return validarFilas(mapearFilas(t.filas), campos, Number.MAX_SAFE_INTEGER).observaciones.map((observacion) => ({ hoja: t.nombre, observacion }));
+    });
 }

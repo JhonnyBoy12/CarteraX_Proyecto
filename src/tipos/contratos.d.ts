@@ -1,188 +1,21 @@
 /**
  * @file contratos.d.ts
- * @description Contratos de datos (tipos) compartidos entre el BACKEND
- * (proceso principal de Electron y servidor HTTP) y el FRONTEND (renderer).
- *
- * ¿Por qué un archivo `.d.ts` global?
- * El renderer se compila como *script* de navegador (sin `import/export`),
- * por lo que no puede importar tipos desde módulos CommonJS sin romperse en
- * runtime. Un `.d.ts` sin `import/export` es **global** para todo el
- * proyecto TypeScript: lo ven tanto los módulos del backend como los scripts
- * del renderer, y no genera ningún `.js` (cero impacto en el empaquetado).
- *
- * Todos los tipos viven en el espacio de nombres `Phoenix` para no chocar
- * con tipos del DOM o de Node.
- *
- * @since 0.2.0 (integración cargador CSV/XLSX + Phoenix Mobile + servidor)
+ * @description Tipos compartidos entre el BACKEND (proceso principal de
+ * Electron) y el FRONTEND (renderer). Es un `.d.ts` global sin
+ * import/export: lo ven los módulos del backend y los scripts del renderer,
+ * y no genera ningún `.js`.
  */
 declare namespace Phoenix {
-  // -------------------------------------------------------------------
-  // Respuesta genérica
-  // -------------------------------------------------------------------
-
-  /** Envoltorio estándar de respuesta para IPC y HTTP. */
+  /** Envoltorio estándar de respuesta IPC. */
   interface Respuesta<T> {
     ok: boolean;
     datos?: T;
     error?: string;
   }
 
-  // -------------------------------------------------------------------
-  // Cargador de archivos (CSV / XLSX)
-  // -------------------------------------------------------------------
-
-  /** Formatos que entiende el cargador. */
-  type FormatoArchivo = "xlsx" | "xls" | "xlsm" | "ods" | "csv" | "tsv" | "txt";
-
-  /** Columna detectada en una hoja y su campo interno (si fue reconocida). */
-  interface ColumnaDetectada {
-    /** Encabezado tal como venía en el archivo. */
-    original: string;
-    /** Campo interno al que se mapea, o `null` si no está en MAPEO_COLUMNAS. */
-    campo: string | null;
-  }
-
-  /** Vista previa de una hoja / tabla antes de importarla. */
-  interface PreviaHoja {
-    hoja: string;
-    totalFilas: number;
-    filasSinRut: number;
-    columnas: ColumnaDetectada[];
-    /** Primeras filas, con las claves ORIGINALES del archivo. */
-    muestra: Record<string, unknown>[];
-  }
-
-  /** Resultado de previsualizar un archivo completo. */
-  interface PreviaArchivo {
-    archivo: string;
-    formato: FormatoArchivo;
-    /** Sólo CSV: separador detectado (`;`, `,`, `\t`, `|`). */
-    separador?: string;
-    /** Sólo CSV: codificación detectada (`utf-8` o `latin1`). */
-    codificacion?: string;
-    hojas: PreviaHoja[];
-  }
-
-  /** Resultado de importar una hoja (mismo formato que la versión 0.1.0). */
-  interface ResultadoHoja {
-    hoja: string;
-    cargados: number;
-    corregidos: number;
-    conError: number;
-  }
-
-  /** Resultado de importar un archivo (mismo formato que la versión 0.1.0). */
-  interface ResultadoImportacion {
-    archivo: string;
-    hojas: ResultadoHoja[];
-    /** Nuevo en 0.2.0: formato de origen detectado. */
-    formato?: FormatoArchivo;
-  }
-
-  // -------------------------------------------------------------------
-  // Cartera / panel
-  // -------------------------------------------------------------------
-
-  interface ClienteResumen {
-    rut: string;
-    nombre_cliente: string | null;
-    monto_deuda: number | null;
-    dias_mora: number | null;
-    categoria_gestion: string | null;
-  }
-
-  interface CategoriaConteo {
-    categoria_gestion: string;
-    total: number;
-  }
-
-  interface TramoConteo {
-    tramo_mora: string;
-    total: number;
-    deuda: number;
-  }
-
-  interface Indicadores {
-    totalClientes: number;
-    deudaTotal: number;
-    moraPromedio: number | null;
-    recuperacionPromedio: number | null;
-    clientesConTelefono: number;
-    totalImportaciones: number;
-    llamadasHoy: number;
-  }
-
-  /** Respuesta de `resumen:obtener` (compatible con 0.1.0 + campos nuevos). */
-  interface PeriodoCartera {
-    id: string;
-    nombre: string;
-    fecha_inicio: string;
-    fecha_fin: string;
-    total_clientes: number;
-  }
-
-  interface PuntoEvolucionCartera {
-    periodo_id: string;
-    periodo: string;
-    fecha_inicio: string;
-    total_clientes: number;
-    deuda_total: number;
-  }
-
-  interface ResumenCartera {
-    periodoId?: string | null;
-    periodos?: PeriodoCartera[];
-    historialDeuda?: PuntoEvolucionCartera[];
-    totalClientes: number;
-    topDeuda: ClienteResumen[];
-    categorias: CategoriaConteo[];
-    /** Nuevo en 0.2.0 */
-    indicadores?: Indicadores;
-    /** Nuevo en 0.2.0 */
-    tramos?: TramoConteo[];
-  }
-
-  interface ImportacionHistorial {
-    archivo_nombre: string;
-    hoja_nombre: string;
-    fecha: string;
-    registros_cargados: number;
-    registros_corregidos: number;
-    registros_con_error: number;
-  }
-
-  /** Cliente con datos de contacto para la vista "Clientes". */
-  interface ClienteDetalle {
-    id: string;
-    rut: string;
-    dv: string | null;
-    nombre_cliente: string | null;
-    monto_deuda: number | null;
-    dias_mora: number | null;
-    tramo_mora: string | null;
-    pct_recuperacion: number | null;
-    categoria_gestion: string | null;
-    comuna: string | null;
-    origen_archivo: string | null;
-    telefonos: string[];
-    correos: string[];
-  }
-
-  interface FiltroClientes {
-    periodoId?: string;
-    texto?: string;
-    categoria?: string;
-    pagina?: number;
-    porPagina?: number;
-  }
-
-  interface PaginaClientes {
-    total: number;
-    pagina: number;
-    porPagina: number;
-    filas: ClienteDetalle[];
-  }
-
+  // ===================================================================
+  // Sesión y contexto
+  // ===================================================================
 
   interface UsuarioSesion {
     id: string;
@@ -191,18 +24,513 @@ declare namespace Phoenix {
     email: string;
   }
 
-  // -------------------------------------------------------------------
-  // Phoenix Mobile (teléfono Android por Wi-Fi)
-  // -------------------------------------------------------------------
+  interface Periodo {
+    /** 'AAAA-MM' */
+    id: string;
+    /** 'Octubre 2026' */
+    nombre: string;
+    fechaInicio: string;
+    fechaFin: string;
+    clientes: number;
+    deuda: number;
+    /** `true` para el mes calendario en curso. */
+    esActual: boolean;
+  }
 
-  /** Respuesta de GET /ping de Phoenix Mobile. */
+  /** Lo que la interfaz necesita saber al iniciar sesión o cambiar de mes. */
+  interface Contexto {
+    usuario: UsuarioSesion;
+    periodo: Periodo;
+    periodos: Periodo[];
+    version: string;
+  }
+
+  // ===================================================================
+  // Estados de cobranza
+  // ===================================================================
+
+  type CodigoEstado =
+    | "PENDIENTE"
+    | "EN_COLA"
+    | "CONTACTADO"
+    | "NO_CONTESTA"
+    | "NOTIFICADO"
+    | "COMPROMISO"
+    | "ABONO"
+    | "PAGADO"
+    | "NO_PAGADO"
+    | "ALERTA"
+    | "INUBICABLE"
+    | "NO_CONTACTAR";
+
+  interface EstadoCobranza {
+    codigo: CodigoEstado;
+    nombre: string;
+    descripcion: string;
+    /** Nombre del tono de color (clase CSS `tono-<tono>`). */
+    tono: string;
+    grupo: "abierto" | "cerrado";
+    /** Peso en el score de prioridad (0–1). */
+    peso: number;
+    pideFecha?: boolean;
+    pideMonto?: boolean;
+    montoObligatorio?: boolean;
+    /** Recordatorio de vuelta de gestión que se sugiere al pasar a este estado. */
+    recordatorio?: ReglaRecordatorio;
+  }
+
+  /**
+   * Cuándo volver a gestionar un caso según su estado. `desde: "compromiso"`
+   * cuenta desde la fecha comprometida; si no, desde ahora.
+   */
+  interface ReglaRecordatorio {
+    motivo: string;
+    dias?: number;
+    horas?: number;
+    hora?: string;
+    desde?: "ahora" | "compromiso";
+  }
+
+  type NivelPrioridad = "alta" | "media" | "baja";
+
+  // ===================================================================
+  // Importación (CSV / Excel)
+  // ===================================================================
+
+  type FormatoArchivo = "xlsx" | "xls" | "xlsm" | "ods" | "csv" | "tsv" | "txt";
+
+  interface ColumnaDetectada {
+    original: string;
+    campo: string | null;
+  }
+
+  interface PreviaHoja {
+    hoja: string;
+    totalFilas: number;
+    filasSinRut: number;
+    columnas: ColumnaDetectada[];
+    muestra: Record<string, unknown>[];
+    /** Revisión fila a fila de lo que se cargará (no escribe nada). */
+    validacion?: ValidacionHoja;
+  }
+
+  /** `rechazo`: la fila no se carga. `aviso`: se carga, con un dato descartado o dudoso. */
+  type NivelObservacion = "rechazo" | "aviso";
+
+  interface FilaObservada {
+    /** Número de fila tal como se ve en Excel (encabezado = fila 1). */
+    fila: number;
+    rut: string | null;
+    nombre: string | null;
+    campo: string | null;
+    valor: string | null;
+  }
+
+  interface ObservacionImportacion {
+    codigo: string;
+    nivel: NivelObservacion;
+    titulo: string;
+    /** Qué hará CarteraX con esas filas. */
+    efecto: string;
+    /** Qué debe hacer el ejecutivo. */
+    accion: string;
+    total: number;
+    filas: FilaObservada[];
+  }
+
+  interface ValidacionHoja {
+    filasValidas: number;
+    filasConAvisos: number;
+    filasRechazadas: number;
+    observaciones: ObservacionImportacion[];
+    /** Fila (como en Excel) → campos con problema, para marcar la muestra. */
+    marcas: Record<number, string[]>;
+  }
+
+  interface PreviaArchivo {
+    archivo: string;
+    formato: FormatoArchivo;
+    separador?: string;
+    codificacion?: string;
+    hojas: PreviaHoja[];
+  }
+
+  interface ResultadoHoja {
+    hoja: string;
+    cargados: number;
+    corregidos: number;
+    conError: number;
+  }
+
+  interface ResultadoImportacion {
+    archivo: string;
+    hojas: ResultadoHoja[];
+    formato?: FormatoArchivo;
+    periodoId?: string;
+  }
+
+  interface ImportacionHistorial {
+    archivo_nombre: string;
+    hoja_nombre: string;
+    fecha: string;
+    periodo: string;
+    registros_cargados: number;
+    registros_corregidos: number;
+    registros_con_error: number;
+    estado: string;
+  }
+
+  // ===================================================================
+  // Cartera y clientes
+  // ===================================================================
+
+  interface TelefonoCliente {
+    id: string;
+    numero: string;
+    prioridad: number;
+    valido: boolean;
+    estadoLlamada: string;
+    intentos: number;
+    ultimaLlamada: string | null;
+  }
+
+  interface ClienteFila {
+    id: string;
+    rut: string;
+    dv: string | null;
+    nombre: string;
+    deuda: number;
+    diasMora: number | null;
+    tramo: string | null;
+    pctRecuperacion: number | null;
+    comuna: string | null;
+    patentes: string[];
+    estado: CodigoEstado;
+    categoriaImportada: string | null;
+    telefonos: TelefonoCliente[];
+    correos: string[];
+    ultimaGestion: string | null;
+    diasSinGestion: number | null;
+    ultimoComentario: string | null;
+    proximaGestion: string | null;
+    fechaCompromiso: string | null;
+    montoCompromiso: number | null;
+    compromisoVencido: boolean;
+    montoRecuperado: number;
+    totalGestiones: number;
+    prioridad: number;
+    nivelPrioridad: NivelPrioridad;
+  }
+
+  type OrdenClientes =
+    | "prioridad"
+    | "deuda_desc"
+    | "deuda_asc"
+    | "mora_desc"
+    | "mora_asc"
+    | "nombre"
+    | "ultima_gestion"
+    | "compromiso";
+
+  type FiltroRapido =
+    | ""
+    | "compromisos_vencidos"
+    | "compromisos_semana"
+    | "sin_gestion"
+    | "gestionados_hoy"
+    | "proxima_gestion_hoy";
+
+  interface FiltroClientes {
+    texto?: string;
+    estados?: CodigoEstado[];
+    tramo?: string;
+    comuna?: string;
+    deudaMin?: number | null;
+    deudaMax?: number | null;
+    moraMin?: number | null;
+    moraMax?: number | null;
+    conTelefono?: "" | "si" | "no";
+    prioridad?: "" | NivelPrioridad;
+    rapido?: FiltroRapido;
+    orden?: OrdenClientes;
+    pagina?: number;
+    porPagina?: number;
+  }
+
+  interface PaginaClientes {
+    total: number;
+    pagina: number;
+    porPagina: number;
+    filas: ClienteFila[];
+    /** Suma de deuda de TODAS las filas filtradas (no sólo la página). */
+    sumaDeuda: number;
+    /** Conteo por estado con el resto de filtros aplicados (para los chips). */
+    conteoEstados: Partial<Record<CodigoEstado, number>>;
+    /** Ids de todas las filas filtradas (para "seleccionar todo"). */
+    idsFiltrados: string[];
+  }
+
+  interface OpcionesFiltro {
+    tramos: string[];
+    comunas: string[];
+    deudaMaxima: number;
+  }
+
+  interface Operacion {
+    numero: string;
+    deuda: number;
+    cuota: number | null;
+    cuotasPactadas: number | null;
+    cuotasPagadas: number | null;
+    cuotasMorosas: number | null;
+    diasMora: number | null;
+    tramo: string | null;
+    fechaVencimiento: string | null;
+    fechaUltimoPago: string | null;
+  }
+
+  type TipoGestion = "comentario" | "cambio_estado" | "llamada";
+
+  interface Gestion {
+    id: string;
+    fecha: string;
+    tipo: TipoGestion;
+    estadoAnterior: CodigoEstado | null;
+    estadoNuevo: CodigoEstado | null;
+    comentario: string | null;
+    resultado: string | null;
+    monto: number | null;
+    fechaCompromiso: string | null;
+    proximaGestion: string | null;
+    telefono: string | null;
+    duracion: number | null;
+    motivoLlamada: MotivoLlamada | null;
+    usuario: string | null;
+  }
+
+  interface DetalleCliente extends ClienteFila {
+    direcciones: Array<{ direccion: string; comuna: string | null }>;
+    vehiculos: Array<{ marca: string | null; modelo: string | null; patente: string | null }>;
+    operaciones: Operacion[];
+    gestiones: Gestion[];
+    textoGestionImportada: string | null;
+  }
+
+  /** Registrar una gestión sobre uno o varios clientes (RF-18). */
+  interface SolicitudGestion {
+    clienteIds: string[];
+    /** Nuevo estado; omitido = sólo comentario. */
+    estado?: CodigoEstado | null;
+    comentario?: string | null;
+    monto?: number | null;
+    fechaCompromiso?: string | null;
+    proximaGestion?: string | null;
+    /**
+     * Recordatorio de vuelta de gestión. Omitido: se aplica la regla del
+     * estado (sólo con un cliente). `null`: sin recordatorio.
+     */
+    recordatorio?: NuevoRecordatorio | null;
+  }
+
+  interface NuevoRecordatorio {
+    /** Hora local 'AAAA-MM-DDTHH:MM'. */
+    fechaHora: string;
+    motivo?: string | null;
+  }
+
+  // ===================================================================
+  // Recordatorios (vuelta de gestión)
+  // ===================================================================
+
+  interface Recordatorio {
+    id: string;
+    clienteId: string;
+    nombre: string;
+    rut: string;
+    dv: string | null;
+    /** Hora local 'AAAA-MM-DDTHH:MM'. */
+    fechaHora: string;
+    motivo: string;
+    estadoOrigen: CodigoEstado | null;
+    estadoActual: CodigoEstado;
+    deuda: number;
+  }
+
+  interface ResultadoGestion {
+    actualizados: number;
+    omitidos: number;
+  }
+
+  // ===================================================================
+  // Dashboard
+  // ===================================================================
+
+  interface Kpis {
+    clientes: number;
+    deudaTotal: number;
+    deudaPendiente: number;
+    recuperado: number;
+    pctRecuperado: number;
+    metaMensual: number;
+    pctMeta: number | null;
+    compromisosVigentes: number;
+    montoCompromisos: number;
+    compromisosVencidos: number;
+    gestionados: number;
+    pctGestionados: number;
+    moraPromedio: number | null;
+    enCola: number;
+    llamadasPeriodo: number;
+    contactadasPeriodo: number;
+    pctContactabilidad: number | null;
+    llamadasHoy: number;
+    gestionesHoy: number;
+    prioridadAlta: number;
+  }
+
+  interface SerieEstado {
+    estado: CodigoEstado;
+    clientes: number;
+    deuda: number;
+  }
+
+  interface SerieTramo {
+    tramo: string;
+    clientes: number;
+    deuda: number;
+  }
+
+  interface SerieRango {
+    rango: string;
+    desde: number;
+    hasta: number | null;
+    clientes: number;
+    deuda: number;
+  }
+
+  interface SerieActividad {
+    fecha: string;
+    gestiones: number;
+    llamadas: number;
+    cambios: number;
+    recuperado: number;
+  }
+
+  type TipoAlerta = "compromiso_vencido" | "compromiso_hoy" | "alta_sin_gestion" | "estado_alerta" | "proxima_gestion";
+
+  interface Alerta {
+    tipo: TipoAlerta;
+    nivel: "alta" | "media";
+    clienteId: string;
+    nombre: string;
+    rut: string;
+    detalle: string;
+  }
+
+  /** Resumen de llamadas del mes por resultado. */
+  interface ResumenLlamadas {
+    total: number;
+    contestadas: number;
+    porMotivo: Partial<Record<MotivoLlamada, number>>;
+    /** Llamadas enviadas cuyo término nunca se confirmó. */
+    sinConfirmar: number;
+    segundosHablados: number;
+    duracionPromedio: number | null;
+  }
+
+  interface AgendaSeguimiento {
+    atrasados: number;
+    hoy: number;
+    proximos: number;
+    lista: Recordatorio[];
+  }
+
+  interface Dashboard {
+    periodo: Periodo;
+    generado: string;
+    kpis: Kpis;
+    /** Desde v0.3.1 (los reportes anteriores no lo traen). */
+    llamadas?: ResumenLlamadas;
+    agenda?: AgendaSeguimiento;
+    porEstado: SerieEstado[];
+    porTramo: SerieTramo[];
+    porRango: SerieRango[];
+    actividad: SerieActividad[];
+    topDeuda: ClienteFila[];
+    proximosCompromisos: ClienteFila[];
+    alertas: Alerta[];
+  }
+
+  // ===================================================================
+  // Reportes mensuales
+  // ===================================================================
+
+  interface ReporteResumen {
+    id: string;
+    periodoId: string;
+    periodoNombre: string;
+    titulo: string;
+    automatico: boolean;
+    notas: string | null;
+    generadoEn: string;
+    deudaTotal: number;
+    recuperado: number;
+    clientes: number;
+  }
+
+  interface ClienteReporte {
+    rut: string;
+    dv: string | null;
+    nombre: string;
+    deuda: number;
+    diasMora: number | null;
+    tramo: string | null;
+    estado: CodigoEstado;
+    recuperado: number;
+    prioridad: number;
+    ultimaGestion: string | null;
+    ultimoComentario: string | null;
+    fechaCompromiso: string | null;
+    montoCompromiso: number | null;
+    telefonos: string;
+  }
+
+  interface ReporteDetalle extends ReporteResumen {
+    dashboard: Dashboard;
+    clientesDetalle: ClienteReporte[];
+  }
+
+  type FormatoDescarga = "xlsx" | "pdf" | "csv";
+
+  // ===================================================================
+  // Configuración y respaldo
+  // ===================================================================
+
+  interface ConfigApp {
+    /** Meta de recuperación del mes en pesos (0 = sin meta). */
+    metaMensual: number;
+    /** Días sin gestión para alertar un cliente de prioridad alta. */
+    diasSinGestion: number;
+    /** Minutos de inactividad antes de cerrar la sesión (RNF-07). */
+    inactividadMinutos: number;
+  }
+
+  interface ArchivoGuardado {
+    ruta: string;
+  }
+
+  // ===================================================================
+  // Phoenix Mobile y cola de llamadas
+  // ===================================================================
+
   interface EstadoMovil {
     conectado: boolean;
     ip: string | null;
     puerto: number;
     dispositivo?: string;
     permisoLlamadas?: boolean;
-    llamadaDirecta?: boolean;
+    seguimientoLlamadas?: boolean;
+    version?: string;
     detalle?: string;
   }
 
@@ -215,28 +543,90 @@ declare namespace Phoenix {
   interface ItemColaLlamadas {
     telefonoId: string;
     numero: string;
-    prioridad: number;
-    estadoTelefono: string;
     clienteId: string;
     rut: string;
     dv: string | null;
-    nombreCliente: string;
-    estadoImportado: string | null;
-    deudaTotal: number;
+    nombre: string;
+    deuda: number;
+    diasMora: number | null;
+    prioridad: number;
+    telefonosPendientes: number;
+    ultimoComentario: string | null;
+  }
+
+  type ProcesoCola =
+    | "DETENIDA"
+    | "MARCANDO"
+    | "EN_LLAMADA"
+    | "ESPERANDO_FIN"
+    | "ESPERANDO_RESULTADO"
+    | "PAUSADA"
+    | "FINALIZADA"
+    | "ERROR";
+
+  /**
+   * Cómo terminó un intento de llamada. Android sólo distingue contestó / no
+   * contestó; el resto lo indica el ejecutivo (o lo corrige después).
+   */
+  type MotivoLlamada =
+    | "contestada"
+    | "no_contesta"
+    | "ocupado"
+    | "rechazada"
+    | "apagado"
+    | "inexistente"
+    | "cortada";
+
+  /** Último intento cerrado, para corregir su motivo sin detener la cola. */
+  interface IntentoLlamada {
+    gestionId: string;
+    nombre: string;
+    numero: string;
+    motivo: MotivoLlamada;
+    duracion: number | null;
+  }
+
+  /** Seguimiento de una llamada manual (fuera de la cola). */
+  interface SeguimientoLlamada {
+    gestionId: string;
+    numero: string;
+    nombre: string | null;
+    /** Segundos desde que se marcó. */
+    transcurrido: number;
+    /** `true` si el teléfono informa el término de la llamada. */
+    automatico: boolean;
+    terminada: boolean;
+    motivo: MotivoLlamada | null;
+    duracion: number | null;
   }
 
   interface EstadoColaLlamadas {
+    activa: boolean;
+    pausada: boolean;
+    proceso: ProcesoCola;
+    actual: ItemColaLlamadas | null;
+    /** El teléfono colgó pero no informó si contestaron: se pide el resultado. */
+    terminoSinDatos?: boolean;
+    ultimoIntento?: IntentoLlamada | null;
+    /** Clientes en estado EN_COLA con algún teléfono pendiente. */
     pendientes: number;
-    siguiente: ItemColaLlamadas | null;
-    activa?: boolean;
-    estadoProceso?: "DETENIDA" | "BUSCANDO" | "MARCANDO" | "EN_LLAMADA" | "ESPERANDO_FIN" | "FINALIZADA" | "ERROR";
-    actual?: ItemColaLlamadas | null;
-    mensaje?: string | null;
+    /** Clientes EN_COLA sin teléfonos válidos pendientes. */
+    sinTelefono: number;
+    proximos: ItemColaLlamadas[];
+    mensaje: string | null;
+    duracionUltima: number | null;
+    sesion: { llamadas: number; contestadas: number; noContesta: number; gestionados: number; inicio: string | null };
   }
 
-  interface ResultadoColaLlamadas {
-    item: ItemColaLlamadas;
-    llamada: ResultadoLlamada;
+  interface ResultadoCola {
+    estado: CodigoEstado;
+    comentario?: string | null;
+    monto?: number | null;
+    fechaCompromiso?: string | null;
+    proximaGestion?: string | null;
+    recordatorio?: NuevoRecordatorio | null;
+    /** Segundos de conversación, si el ejecutivo los ajusta. */
+    duracion?: number | null;
   }
 
   interface LlamadaRegistrada {
@@ -245,25 +635,10 @@ declare namespace Phoenix {
     cliente_id: string | null;
     rut: string | null;
     nombre_cliente: string | null;
+    telefono: string | null;
     texto_libre: string | null;
     resultado: string | null;
-  }
-
-  // -------------------------------------------------------------------
-  // Servidor HTTP (cliente-servidor)
-  // -------------------------------------------------------------------
-
-  interface ConfigServidor {
-    habilitado: boolean;
-    puerto: number;
-    /** `true` = escucha en 0.0.0.0 (otros PC de la red pueden conectarse). */
-    accesoRed: boolean;
-  }
-
-  interface EstadoServidor extends ConfigServidor {
-    activo: boolean;
-    urls: string[];
-    error?: string;
-    modo: "electron" | "standalone";
+    duracion: number | null;
+    motivo_llamada: MotivoLlamada | null;
   }
 }
