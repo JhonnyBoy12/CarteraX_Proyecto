@@ -5,55 +5,80 @@ import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
+/** Petición HTTP ya leída. Las cabeceras van en minúsculas. */
+class Peticion(
+    val metodo: String,
+    val ruta: String,
+    val cabeceras: Map<String, String>,
+    val cuerpo: String,
+)
+
 /**
- * Servidor HTTP mínimo que recibe las órdenes de CarteraX (Phoenix Desktop)
- * por la red Wi‑Fi local. No depende de la interfaz: cada petición se
- * entrega a [manejador], que devuelve el código HTTP y el JSON de respuesta.
+ * Servidor HTTP mínimo que recibe las órdenes de CarteraX por la red Wi‑Fi
+ * local. Vive dentro de [ServicioPhoenix] (servicio en primer plano), así que
+ * sigue atendiendo aunque la app quede detrás del marcador durante la llamada.
  *
- * Protocolo (sin cambios de rutas respecto a la v0.2, ver clienteMovil.ts):
- *  - GET  /ping               → estado del teléfono y permisos
- *  - POST /call {phone, name?, rut?} → inicia la llamada
- *  - GET  /call-status        → estado de la última llamada
- *  - POST /call-status/ack    → CarteraX confirma que procesó el término
+ * Protocolo v0.4 (compatible con las rutas de la v0.3, ver clienteMovil.ts):
+ *  - GET  /ping               → estado del teléfono; sin vínculo sólo dice quién es
+ *  - POST /pair {code, desktop} → vincula este computador con el código de 6 dígitos
+ *  - POST /unpair             → desvincula (requiere token)
+ *  - POST /call {phone, name?, rut?} → inicia la llamada (requiere token)
+ *  - GET  /call-status        → estado de la última llamada (requiere token)
+ *  - POST /call-status/ack    → CarteraX confirma que procesó el término (requiere token)
  *
- * @param puerto puerto TCP (8765).
- * @param manejador (método, ruta, cuerpo) → (código HTTP, JSON).
- * @param alError se invoca si el socket no puede abrirse.
+ * El token viaja en la cabecera `X-Phoenix-Token`.
  */
 class ServidorPhoenix(
     private val puerto: Int,
-    private val manejador: (metodo: String, ruta: String, cuerpo: String) -> Pair<Int, JSONObject>,
+    private val manejador: (Peticion) -> Pair<Int, JSONObject>,
     private val alIniciar: () -> Unit,
     private val alError: (String) -> Unit,
 ) {
-    private var socket: ServerSocket? = null
+    @Volatile private var socket: ServerSocket? = null
+    @Volatile private var detenido = false
     private val hilos: ExecutorService = Executors.newCachedThreadPool()
 
     fun iniciar() {
         hilos.execute {
-            try {
-                val s = ServerSocket(puerto)
-                socket = s
-                alIniciar()
-                while (!s.isClosed) {
-                    val cliente = s.accept()
-                    hilos.execute { atender(cliente) }
+            // Si el servicio se reinicia, el puerto puede tardar un instante en liberarse.
+            var intentos = 0
+            while (!detenido) {
+                try {
+                    val s = ServerSocket()
+                    s.reuseAddress = true
+                    s.bind(InetSocketAddress(puerto))
+                    socket = s
+                    alIniciar()
+                    while (!s.isClosed) {
+                        val cliente = s.accept()
+                        hilos.execute { atender(cliente) }
+                    }
+                    return@execute
+                } catch (e: SocketException) {
+                    if (detenido) return@execute
+                    intentos++
+                    if (intentos >= 5) {
+                        alError("No se pudo abrir el puerto $puerto: ${e.message}")
+                        return@execute
+                    }
+                    Thread.sleep(2000)
+                } catch (e: Exception) {
+                    if (!detenido) alError("No se pudo iniciar el servidor: ${e.message}")
+                    return@execute
                 }
-            } catch (e: SocketException) {
-                if (socket?.isClosed != true) alError("Error de red: ${e.message}")
-            } catch (e: Exception) {
-                alError("No se pudo iniciar el servidor: ${e.message}")
             }
         }
     }
 
     fun detener() {
+        detenido = true
         try {
             socket?.close()
         } catch (_: Exception) {
@@ -77,15 +102,16 @@ class ServidorPhoenix(
                 val metodo = partes[0].uppercase()
                 val ruta = partes[1].substringBefore("?")
 
-                var largo = 0
+                val cabeceras = HashMap<String, String>()
                 while (true) {
                     val cabecera = lector.readLine() ?: break
                     if (cabecera.isEmpty()) break
                     val i = cabecera.indexOf(':')
-                    if (i > 0 && cabecera.substring(0, i).trim().equals("Content-Length", ignoreCase = true)) {
-                        largo = cabecera.substring(i + 1).trim().toIntOrNull() ?: 0
+                    if (i > 0 && cabeceras.size < 50) {
+                        cabeceras[cabecera.substring(0, i).trim().lowercase()] = cabecera.substring(i + 1).trim()
                     }
                 }
+                val largo = cabeceras["content-length"]?.toIntOrNull() ?: 0
 
                 // El cuerpo se lee como caracteres; los JSON de CarteraX son pequeños.
                 val buffer = CharArray(largo.coerceIn(0, 64 * 1024))
@@ -95,7 +121,7 @@ class ServidorPhoenix(
                     if (n <= 0) break
                     leidos += n
                 }
-                val (codigo, json) = manejador(metodo, ruta, String(buffer, 0, leidos))
+                val (codigo, json) = manejador(Peticion(metodo, ruta, cabeceras, String(buffer, 0, leidos)))
                 escribir(escritor, codigo, json)
             } catch (e: Exception) {
                 try {
@@ -111,8 +137,11 @@ class ServidorPhoenix(
         val razon = when (codigo) {
             200 -> "OK"
             400 -> "Bad Request"
+            401 -> "Unauthorized"
             403 -> "Forbidden"
             404 -> "Not Found"
+            409 -> "Conflict"
+            429 -> "Too Many Requests"
             else -> "Internal Server Error"
         }
         w.write("HTTP/1.1 $codigo $razon\r\n")

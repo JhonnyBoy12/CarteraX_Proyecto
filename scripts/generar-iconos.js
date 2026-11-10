@@ -1,7 +1,7 @@
 /**
  * Genera todos los íconos de CarteraX y Phoenix Mobile desde
- * src/renderer/assets/logo.svg, usando Electron para rasterizar (no hace
- * falta ImageMagick):
+ * src/renderer/assets/logo.svg (la X con flecha), usando Electron para
+ * rasterizar (no hace falta ImageMagick):
  *  - src/renderer/assets/icono.png (512)   ícono de la ventana
  *  - build/icon.png (512) y build/icon.ico (16–256)   instaladores
  *  - Android: mipmap-*dpi/ic_launcher.png y drawable-xxxhdpi/ic_launcher_foreground.png
@@ -18,8 +18,9 @@ app.disableHardwareAcceleration();
 
 const raiz = path.join(__dirname, "..");
 const svg = fs.readFileSync(path.join(raiz, "src", "renderer", "assets", "logo.svg"), "utf-8");
-// Para el ícono adaptable de Android: sólo el trazo, el fondo lo pone el sistema.
-const svgSinFondo = svg.replace(/<rect[^>]*\/>/, "");
+// Para el ícono adaptable de Android: sólo los trazos (sin fondo ni borde);
+// el fondo azul noche lo pone el sistema (@color/logo_fondo).
+const svgSinFondo = svg.replace(/<rect[^>]*\/>/g, "");
 const res = path.join(raiz, "movil", "android", "app", "src", "main", "res");
 
 async function rasterizar(win, fuente, lado) {

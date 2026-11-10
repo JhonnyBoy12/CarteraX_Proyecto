@@ -1,44 +1,55 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <bool name="barra_clara">true</bool>
+
     <!-- Claro u oscuro según el sistema (los colores cambian en values-night). -->
     <style name="Theme.PhoenixMobile" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/phoenix_naranja</item>
-        <item name="colorPrimaryVariant">@color/phoenix_naranja_hondo</item>
-        <item name="colorOnPrimary">@color/tinta_fija</item>
-        <item name="colorSecondary">@color/phoenix_naranja</item>
-        <item name="colorOnSecondary">@color/tinta_fija</item>
+        <item name="colorPrimary">@color/acento</item>
+        <item name="colorPrimaryVariant">@color/acento_hondo</item>
+        <item name="colorOnPrimary">@color/sobre_acento</item>
+        <item name="colorSecondary">@color/acento</item>
+        <item name="colorOnSecondary">@color/sobre_acento</item>
         <item name="colorSurface">@color/superficie</item>
         <item name="colorOnSurface">@color/tinta</item>
+        <item name="colorControlActivated">@color/acento</item>
         <item name="android:colorBackground">@color/fondo</item>
-        <item name="android:statusBarColor">@color/grafito</item>
-        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowBackground">@color/fondo</item>
+        <item name="android:statusBarColor">@color/fondo</item>
+        <item name="android:windowLightStatusBar">@bool/barra_clara</item>
+        <item name="android:navigationBarColor">@color/fondo</item>
         <item name="android:textColorPrimary">@color/tinta</item>
-        <item name="android:textColorSecondary">@color/pizarra</item>
+        <item name="android:textColorSecondary">@color/tinta_3</item>
         <item name="materialCardViewStyle">@style/Phoenix.Tarjeta</item>
         <item name="materialButtonStyle">@style/Phoenix.Boton</item>
     </style>
 
     <style name="Phoenix.Tarjeta" parent="Widget.MaterialComponents.CardView">
         <item name="cardBackgroundColor">@color/superficie</item>
-        <item name="cardCornerRadius">10dp</item>
+        <item name="cardCornerRadius">18dp</item>
         <item name="cardElevation">0dp</item>
         <item name="strokeColor">@color/linea</item>
         <item name="strokeWidth">1dp</item>
+        <item name="contentPadding">18dp</item>
     </style>
 
+    <!-- Botón principal: acento plano con texto oscuro (nunca blanco sobre naranjo). -->
     <style name="Phoenix.Boton" parent="Widget.MaterialComponents.Button">
-        <item name="cornerRadius">6dp</item>
+        <item name="cornerRadius">12dp</item>
+        <item name="android:minHeight">48dp</item>
         <item name="android:textAllCaps">false</item>
         <item name="android:letterSpacing">0</item>
         <item name="android:textStyle">bold</item>
+        <item name="backgroundTint">@color/acento</item>
+        <item name="android:textColor">@color/sobre_acento</item>
+        <item name="elevation">0dp</item>
     </style>
 
-    <!-- Botones de texto y contorno: sin mayúsculas forzadas, como en el escritorio. -->
     <style name="Phoenix.BotonTexto" parent="Widget.MaterialComponents.Button.TextButton">
         <item name="android:textAllCaps">false</item>
         <item name="android:letterSpacing">0</item>
         <item name="android:textStyle">bold</item>
-        <item name="android:textColor">@color/phoenix_naranja_hondo</item>
+        <item name="android:textColor">@color/acento_hondo</item>
+        <item name="rippleColor">@color/acento_suave</item>
     </style>
 
     <style name="Phoenix.BotonContorno" parent="Widget.MaterialComponents.Button.OutlinedButton">
@@ -46,30 +57,91 @@
         <item name="android:letterSpacing">0</item>
         <item name="android:textStyle">bold</item>
         <item name="android:textColor">@color/tinta</item>
-        <item name="strokeColor">@color/linea</item>
-        <item name="cornerRadius">6dp</item>
+        <item name="strokeColor">@color/linea_fuerte</item>
+        <item name="cornerRadius">12dp</item>
+        <item name="android:minHeight">44dp</item>
     </style>
 
-    <style name="Phoenix.TituloTarjeta">
-        <item name="android:textSize">15sp</item>
+    <!-- Botón pequeño de las filas de permisos: tintado suave del acento. -->
+    <style name="Phoenix.BotonSuave" parent="Widget.MaterialComponents.Button.UnelevatedButton">
+        <item name="android:textAllCaps">false</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="android:textStyle">bold</item>
+        <item name="backgroundTint">@color/acento_suave</item>
+        <item name="android:textColor">@color/acento_hondo</item>
+        <item name="cornerRadius">10dp</item>
+        <item name="android:minHeight">40dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:paddingStart">14dp</item>
+        <item name="android:paddingEnd">14dp</item>
+    </style>
+
+    <!-- parent="" explícito: sin él, aapt2 infiere el padre "Phoenix" por el punto del nombre
+         y el build falla con "resource style/Phoenix not found". -->
+    <style name="Phoenix.TituloTarjeta" parent="">
+        <item name="android:textSize">16sp</item>
         <item name="android:textStyle">bold</item>
         <item name="android:textColor">@color/tinta</item>
-        <item name="android:layout_marginBottom">12dp</item>
     </style>
 
-    <style name="Phoenix.FilaPermiso">
+    <style name="Phoenix.Rotulo" parent="">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/tinta_3</item>
+        <item name="android:letterSpacing">0.02</item>
+    </style>
+
+    <style name="Phoenix.Ayuda" parent="">
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">@color/tinta_3</item>
+        <item name="android:lineSpacingExtra">2dp</item>
+    </style>
+
+    <style name="Phoenix.Digito" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">60dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_marginStart">4dp</item>
+        <item name="android:layout_marginEnd">4dp</item>
+        <item name="android:background">@drawable/caja_digito</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textSize">28sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/tinta</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+    </style>
+
+    <style name="Phoenix.FilaPermiso" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:orientation">horizontal</item>
         <item name="android:gravity">center_vertical</item>
-        <item name="android:minHeight">56dp</item>
-        <item name="android:paddingTop">6dp</item>
-        <item name="android:paddingBottom">6dp</item>
+        <item name="android:minHeight">60dp</item>
+        <item name="android:paddingTop">8dp</item>
+        <item name="android:paddingBottom">8dp</item>
     </style>
 
-    <!-- Segmento de la franja de estados de la cabecera -->
-    <style name="Phoenix.Franja">
+    <style name="Phoenix.PuntoPermiso" parent="">
+        <item name="android:layout_width">10dp</item>
+        <item name="android:layout_height">10dp</item>
+        <item name="android:layout_marginEnd">14dp</item>
+        <item name="android:layout_marginTop">7dp</item>
+        <item name="android:layout_gravity">top</item>
+        <item name="android:background">@drawable/punto_estado</item>
+    </style>
+
+    <style name="Phoenix.TextosPermiso" parent="">
         <item name="android:layout_width">0dp</item>
-        <item name="android:layout_height">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:layout_marginEnd">10dp</item>
+        <item name="android:layout_gravity">top</item>
+    </style>
+
+    <style name="Phoenix.NombrePermiso" parent="">
+        <item name="android:textSize">15sp</item>
+        <item name="android:textColor">@color/tinta</item>
+        <item name="android:textStyle">bold</item>
     </style>
 </resources>

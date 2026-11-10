@@ -61,6 +61,10 @@ async function ejecutar(win) {
   win.unmaximize();
   win.setContentSize(ANCHO, ALTO);
   await esperar(800);
+  // Interfaz Nova: el tema se guarda en la página, no en el sistema.
+  const esNova = await js(`return typeof elegirPestana === "function";`);
+  if (esNova && process.env.CAPTURAS_TEMA) await js(`aplicarTema(${JSON.stringify(process.env.CAPTURAS_TEMA === "light" ? "claro" : "oscuro")}, false);`);
+  await esperar(esNova ? 700 : 0);
   await foto("00_login");
 
   // Sesión e importación de la cartera de ejemplo.
@@ -85,7 +89,7 @@ async function ejecutar(win) {
   `);
 
   // Simulador de Phoenix Mobile para las llamadas de muestra y la cola.
-  const sim = spawn(process.execPath, [path.join(__dirname, "simulador-movil.js"), "--contesta=siempre", "--duracion=3"], {
+  const sim = spawn(process.execPath, [path.join(__dirname, "simulador-movil.js"), "--contesta=siempre", "--duracion=3", "--codigo=482913"], {
     env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
     stdio: "ignore",
   });
@@ -94,6 +98,9 @@ async function ejecutar(win) {
     if (await js(`return (await Api.probarMovil("127.0.0.1")).conectado;`)) break;
     await esperar(250);
   }
+  // Phoenix Mobile 0.4: se vincula con el código que muestra el teléfono.
+  const conVinculo = await js(`return typeof Api.vincularMovil === "function";`);
+  if (conVinculo) await js(`await Api.vincularMovil("127.0.0.1", "482913");`);
 
   // Llamadas de muestra (si la versión registra motivos): una contestada y
   // tres sin respuesta por distintos motivos.
@@ -121,6 +128,18 @@ async function ejecutar(win) {
   await bajar(1500);
   await foto("03_dashboard_final");
 
+  // Nova: cada pestaña del inicio.
+  if (esNova) {
+    for (const [nombre, tab] of [["01b_inicio_actividad", "actividad"], ["01c_inicio_metas", "metas"], ["01d_inicio_categorias", "categorias"]]) {
+      await js(`elegirPestana(document.querySelector("#dashboard-contenido .tablero"), ${JSON.stringify(tab)}); document.getElementById("contenido").scrollTo({ top: 0 });`);
+      await esperar(1100);
+      await foto(nombre);
+    }
+    await bajar(600);
+    await foto("01e_inicio_categorias_detalle");
+    await js(`elegirPestana(document.querySelector("#dashboard-contenido .tablero"), "resumen");`);
+  }
+
   // Recordatorios (si la versión los incluye).
   const hayRecordatorios = await js(`return typeof abrirRecordatorios === "function";`);
   if (hayRecordatorios) {
@@ -134,6 +153,12 @@ async function ejecutar(win) {
   await js(`irA("clientes");`);
   await esperar(1000);
   await foto("05_clientes");
+  if (esNova) {
+    await js(`document.getElementById("vista-tarjetas").click();`);
+    await esperar(900);
+    await foto("05b_clientes_tarjetas");
+    await js(`document.getElementById("vista-tabla").click();`);
+  }
   await js(`
     const p = await Api.clientes({ orden: "prioridad", porPagina: 5 });
     if (typeof cargarRecordatorios === "function") await cargarRecordatorios();
@@ -141,6 +166,18 @@ async function ejecutar(win) {
     abrirFicha(conRecordatorio ? conRecordatorio.clienteId : p.filas[2].id);`);
   await esperar(900);
   await foto("06_ficha_cliente");
+  if (esNova) {
+    await js(`elegirPestanaFicha("historial");`);
+    await esperar(500);
+    await foto("06b_ficha_historial");
+    await js(`elegirPestanaFicha("gestion"); cerrarFicha(); abrirPaleta(); const t = document.getElementById("paleta-texto"); t.value = "ma"; t.dispatchEvent(new Event("input"));`);
+    await esperar(900);
+    await foto("06c_paleta");
+    await js(`document.getElementById("paleta").close(); document.getElementById("btn-perfil").click();`);
+    await esperar(400);
+    await foto("06d_menu_perfil");
+    await js(`cerrarMenuPerfil();`);
+  }
 
   // Importación con filas inválidas (vista previa + panel de validación).
   const conErrores = csvConErrores();
@@ -181,6 +218,20 @@ async function ejecutar(win) {
     await esperar(1800);
   }
   await foto("13_telefono_llamadas");
+
+  // Vinculación: buscar teléfonos y escribir el código.
+  if (conVinculo) {
+    await js(`cerrarLlamadaManual(); document.getElementById("contenido").scrollTo({ top: 0 }); document.getElementById("btn-buscar-movil").click();`);
+    await esperar(5000);
+    await foto("13b_telefono_buscar");
+    await js(`abrirCodigo("127.0.0.1", "Samsung Galaxy A54");
+      const d = Array.from(document.querySelectorAll("#otp input"));
+      "4829".split("").forEach((c, i) => { d[i].value = c; d[i].classList.add("lleno"); });
+      d[4].focus();`);
+    await esperar(400);
+    await foto("13c_telefono_codigo");
+    await js(`cerrarCodigo();`);
+  }
 
   // Ficha completa: cartera con todas las columnas (scripts/generar-ejemplo-ficha.js).
   const completa = path.join(raiz, "ejemplos", "cartera_ficha_completa.xlsx");

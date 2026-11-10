@@ -33,17 +33,36 @@
  *  - Si el teléfono cuelga sin saber si contestaron, se pide el resultado
  *    en vez de suponer «no contesta».
  *
+ * v0.4 — la cola ya no se queda esperando:
+ *  - Si el teléfono deja de responder más de un minuto, se reinicia a mitad
+ *    de llamada o colgó sin informar el término, se pide el resultado al
+ *    ejecutivo con los minutos aproximados.
+ *  - Si el teléfono no pudo marcar (sin señal, sin SIM, modo avión), la cola
+ *    se pausa con el aviso y ese número no cuenta como intento.
+ *  - Detección automática: una llamada que se corta sin contestar en pocos
+ *    segundos queda como «apagado o sin cobertura»; si el mismo número se
+ *    corta así 3 veces, se marca «número no existe» y sale de la cola (se
+ *    puede reactivar en la ficha). El ejecutivo puede corregirlo siempre.
+ *
  * @since 0.3.0 (reescrita)
  */
 import Database from "better-sqlite3";
 
-import { confirmarEstadoLlamadaMovil, obtenerEstadoLlamadaMovil, pingMovil } from "../movil/clienteMovil";
+import { confirmarEstadoLlamadaMovil, ErrorMovil, EstadoLlamadaMovil, obtenerEstadoLlamadaMovil } from "../movil/clienteMovil";
 import { leerCartera, registrarGestion } from "./servicioCartera";
-import { cerrarLlamada, esMotivoLlamada, llamar, MOTIVOS_LLAMADA, obtenerIpMovil, segundosDesde } from "./servicioMovil";
+import { cerrarLlamada, esMotivoLlamada, llamar, MOTIVOS_LLAMADA, obtenerConexionMovil, probarMovil, segundosDesde } from "./servicioMovil";
 import { Contexto } from "./servicioPeriodos";
 
 /** Segundos sin actividad del teléfono antes de dar la llamada por fallida. */
 const ESPERA_SIN_ACTIVIDAD_S = 45;
+/** Segundos sin respuesta del teléfono antes de pedir el resultado al ejecutivo. */
+const SIN_SENAL_MAX_S = 60;
+/** Segundos con el teléfono en reposo, sin informar el término, antes de preguntar. */
+const REPOSO_SIN_CIERRE_S = 25;
+/** Una llamada sin contestar que se corta antes de esto no alcanzó a sonar. */
+export const CORTE_RAPIDO_S = 12;
+/** Cortes rápidos del mismo número para darlo por inexistente. */
+export const CORTES_PARA_DESCARTAR = 3;
 
 interface Estado {
   activa: boolean;
@@ -68,6 +87,12 @@ interface Estado {
   /** Motivos de los intentos del cliente actual (para el comentario final). */
   intentosCliente: Array<{ clienteId: string; numero: string; motivo: Phoenix.MotivoLlamada }>;
   ultimoIntento: Phoenix.IntentoLlamada | null;
+  /** Id de la llamada que informó el teléfono al marcar (v0.4). */
+  callIdEsperado: number | null;
+  /** Desde cuándo el teléfono no responde (0: responde). */
+  sinRespuestaDesde: number;
+  /** Desde cuándo el teléfono está en reposo sin cerrar la llamada. */
+  reposoDesde: number;
   ocupado: boolean;
   sesion: Phoenix.EstadoColaLlamadas["sesion"];
 }
@@ -92,6 +117,9 @@ function estadoInicial(): Estado {
     transcurridoTelefono: null,
     intentosCliente: [],
     ultimoIntento: null,
+    callIdEsperado: null,
+    sinRespuestaDesde: 0,
+    reposoDesde: 0,
     ocupado: false,
     sesion: { llamadas: 0, contestadas: 0, noContesta: 0, gestionados: 0, inicio: null },
   };
@@ -182,6 +210,9 @@ async function enviarSiguiente(db: Database.Database): Promise<void> {
   try {
     const r = await llamar(db, ctx, siguiente.numero, siguiente.clienteId);
     st.gestionActual = r.gestionId;
+    st.callIdEsperado = r.callId ?? null;
+    st.sinRespuestaDesde = 0;
+    st.reposoDesde = 0;
     db.prepare(
       `UPDATE telefonos SET estado_llamada = 'ENVIADA', intentos_llamada = intentos_llamada + 1,
               ultima_llamada = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
@@ -204,16 +235,18 @@ async function enviarSiguiente(db: Database.Database): Promise<void> {
 export async function iniciarCola(db: Database.Database, ctx: Contexto): Promise<Phoenix.EstadoColaLlamadas> {
   if (st.activa) return obtenerEstadoCola(db, ctx);
 
-  const ip = obtenerIpMovil(db);
-  if (!ip) throw new Error("Primero conecta Phoenix Mobile en la sección «Teléfono».");
-  const ping = await pingMovil(ip);
+  if (!obtenerConexionMovil(db)) throw new Error("Primero vincula Phoenix Mobile en la sección «Teléfono».");
+  // Si el teléfono cambió de IP, probarMovil lo reencuentra por su identificador.
+  const ping = await probarMovil(db);
+  const conexion = obtenerConexionMovil(db)!;
   if (!ping.conectado) throw new Error(`Phoenix Mobile no responde: ${ping.detalle ?? "verifica la conexión Wi-Fi."}`);
+  if (ping.requiereVinculo) throw new Error(`${ping.detalle ?? "Falta vincular el teléfono."} Hazlo en la sección «Teléfono».`);
   if (!ping.permisoLlamadas) throw new Error("Phoenix Mobile no tiene permiso para realizar llamadas. Concédelo en el teléfono.");
   if (!candidatos(db, ctx).items.length) {
     throw new Error("No hay clientes «En cola» con teléfonos pendientes. Envía clientes a la cola desde «Clientes».");
   }
 
-  await confirmarEstadoLlamadaMovil(ip).catch(() => undefined); // limpia un estado viejo del teléfono
+  await confirmarEstadoLlamadaMovil(conexion).catch(() => undefined); // limpia un estado viejo del teléfono
   st = estadoInicial();
   st.ctx = ctx;
   st.activa = true;
@@ -234,7 +267,8 @@ export async function finalizarLlamada(
   db: Database.Database,
   ctx: Contexto,
   motivo: Phoenix.MotivoLlamada,
-  duracion: number | null = null
+  duracion: number | null = null,
+  notaSinRespuesta: string | null = null
 ): Promise<Phoenix.EstadoColaLlamadas> {
   const item = st.actual;
   const ctxCola = st.ctx;
@@ -251,7 +285,10 @@ export async function finalizarLlamada(
     segundos = st.transcurridoTelefono ?? segundosDesde(st.actividadDesde || st.marcadoEn);
     nota = "duración aproximada";
   }
-  if (!contestada) segundos = 0;
+  if (!contestada) {
+    segundos = 0;
+    nota = notaSinRespuesta;
+  }
   cerrarLlamada(db, st.gestionActual, motivo, segundos, nota);
   st.duracionUltima = segundos;
   st.terminoSinDatos = false;
@@ -274,7 +311,7 @@ export async function finalizarLlamada(
   st.ultimoIntento = st.gestionActual
     ? { gestionId: st.gestionActual, nombre: item.nombre, numero: item.numero, motivo, duracion: segundos }
     : null;
-  const etiqueta = MOTIVOS_LLAMADA[motivo].toLowerCase();
+  const etiqueta = MOTIVOS_LLAMADA[motivo].toLowerCase() + (notaSinRespuesta ? " (detectado)" : "");
   const quedan = candidatos(db, ctxCola).items.some((i) => i.clienteId === item.clienteId);
   if (quedan) {
     st.preferido = item.clienteId;
@@ -341,43 +378,124 @@ function cortarLlamadaAbierta(db: Database.Database | null): void {
   db.prepare(`UPDATE telefonos SET estado_llamada = 'PENDIENTE' WHERE id = ? AND estado_llamada = 'ENVIADA'`).run(st.actual.telefonoId);
 }
 
+/**
+ * Motivo de una llamada sin respuesta según cuánto duró: si se cortó en
+ * pocos segundos, no alcanzó a sonar (apagado, sin señal, sin chip o fuera
+ * de servicio). A la tercera vez con el mismo número, se da por inexistente.
+ */
+function motivoSinRespuesta(
+  db: Database.Database,
+  numero: string,
+  m: EstadoLlamadaMovil
+): { motivo: Phoenix.MotivoLlamada; nota: string | null } {
+  if (m.transcurrido === null || m.transcurrido <= 0 || m.transcurrido > CORTE_RAPIDO_S) return { motivo: "no_contesta", nota: null };
+  const digitos = (n: string) => n.replace(/\D/g, "").slice(-9);
+  const previos = (
+    db
+      .prepare(
+        `SELECT telefono FROM gestiones
+          WHERE tipo = 'llamada' AND motivo_llamada IN ('apagado', 'inexistente') AND texto_libre LIKE '%detección automática%'`
+      )
+      .all() as Array<{ telefono: string | null }>
+  ).filter((g) => g.telefono && digitos(g.telefono) === digitos(numero)).length;
+  if (previos + 1 >= CORTES_PARA_DESCARTAR) {
+    return {
+      motivo: "inexistente",
+      nota: `detección automática: ${previos + 1} llamadas se cortaron sin sonar (esta a los ${m.transcurrido} s); el número sale de la cola y se puede reactivar en la ficha`,
+    };
+  }
+  return { motivo: "apagado", nota: `detección automática: se cortó a los ${m.transcurrido} s sin contestar (apagado, sin señal o fuera de servicio)` };
+}
+
+/** La llamada quedó sin dato confiable: se pide el resultado al ejecutivo. */
+function preguntarResultado(mensaje: string): void {
+  st.terminoSinDatos = true;
+  st.transcurridoTelefono = st.vioActividad ? segundosDesde(st.actividadDesde || st.marcadoEn) : null;
+  st.sinRespuestaDesde = 0;
+  st.reposoDesde = 0;
+  st.mensaje = mensaje;
+}
+
 /** Sincroniza con el estado de la llamada que informa Android (sondeo). */
 export async function actualizarCola(db: Database.Database, ctx: Contexto): Promise<Phoenix.EstadoColaLlamadas> {
   if (!st.activa || !st.actual || !["ESPERANDO_FIN", "EN_LLAMADA"].includes(st.proceso) || st.ocupado || st.terminoSinDatos) {
     return obtenerEstadoCola(db, ctx);
   }
-  const ip = obtenerIpMovil(db);
-  if (!ip) throw new Error("No hay un teléfono Android configurado.");
+  const conexion = obtenerConexionMovil(db);
+  if (!conexion) throw new Error("No hay un teléfono Android vinculado.");
+  const actual = st.actual;
 
   st.ocupado = true;
   try {
-    const movil = await obtenerEstadoLlamadaMovil(ip);
+    const movil = await obtenerEstadoLlamadaMovil(conexion);
+    st.sinRespuestaDesde = 0;
+
+    // El teléfono se reinició o perdió la llamada: ya no sabe cómo terminó.
+    if (st.callIdEsperado !== null && movil.callId !== st.callIdEsperado) {
+      preguntarResultado(`El teléfono se reinició durante la llamada con ${actual.nombre}. Indica cómo terminó (los minutos son aproximados).`);
+      return obtenerEstadoCola(db, ctx);
+    }
     if (movil.estado === "OFFHOOK" || movil.estado === "RINGING") {
       if (!st.vioActividad) st.actividadDesde = Date.now();
       st.vioActividad = true;
+      st.reposoDesde = 0;
       st.proceso = "EN_LLAMADA";
-      st.mensaje = `En llamada con ${st.actual.nombre} · ${st.actual.numero}`;
+      st.mensaje = `En llamada con ${actual.nombre} · ${actual.numero}`;
       return obtenerEstadoCola(db, ctx);
     }
     if (movil.completada) {
-      await confirmarEstadoLlamadaMovil(ip).catch(() => undefined);
+      await confirmarEstadoLlamadaMovil(conexion).catch(() => undefined);
+      // No se pudo marcar: es un problema del teléfono, no del cliente.
+      if (movil.falloMarcado) {
+        cerrarLlamada(db, st.gestionActual, "cortada", 0, "el teléfono no pudo marcar (sin señal, sin SIM o modo avión)");
+        db.prepare(`UPDATE telefonos SET estado_llamada = 'PENDIENTE' WHERE id = ? AND estado_llamada = 'ENVIADA'`).run(actual.telefonoId);
+        st.gestionActual = null;
+        st.proceso = "ERROR";
+        st.pausada = true;
+        st.preferido = actual.clienteId;
+        st.mensaje = `El teléfono no pudo marcar a ${actual.numero}. Revisa que tenga señal y SIM (y que no esté en modo avión) y reanuda la cola.`;
+        return obtenerEstadoCola(db, ctx);
+      }
       // Sin registro de llamadas el teléfono no sabe si contestaron: se
       // pregunta al ejecutivo en vez de dar la llamada por no contestada.
       if (movil.contestada === null || !st.seguimiento) {
         st.terminoSinDatos = true;
         st.transcurridoTelefono = movil.transcurrido;
-        st.mensaje = `La llamada con ${st.actual.nombre} terminó, pero el teléfono no informó si contestaron. Indica cómo terminó.`;
+        st.mensaje = `La llamada con ${actual.nombre} terminó, pero el teléfono no informó si contestaron. Indica cómo terminó.`;
         return obtenerEstadoCola(db, ctx);
       }
-      return await finalizarLlamada(db, ctx, movil.contestada ? "contestada" : "no_contesta", movil.contestada ? movil.duracion : 0);
+      if (movil.contestada) return await finalizarLlamada(db, ctx, "contestada", movil.duracion);
+      const { motivo, nota } = motivoSinRespuesta(db, actual.numero, movil);
+      return await finalizarLlamada(db, ctx, motivo, 0, nota);
+    }
+    // Colgó (reposo) pero nunca informó el término: no se queda esperando.
+    if (st.vioActividad) {
+      if (!st.reposoDesde) st.reposoDesde = Date.now();
+      if (segundosDesde(st.reposoDesde) >= REPOSO_SIN_CIERRE_S) {
+        preguntarResultado(`El teléfono colgó la llamada con ${actual.nombre} sin informar cómo terminó. Indícalo para seguir.`);
+      }
+      return obtenerEstadoCola(db, ctx);
     }
     // El teléfono nunca mostró actividad: la llamada no se inició.
-    if (st.seguimiento && !st.vioActividad && Date.now() - st.marcadoEn > ESPERA_SIN_ACTIVIDAD_S * 1000) {
+    if (st.seguimiento && Date.now() - st.marcadoEn > ESPERA_SIN_ACTIVIDAD_S * 1000) {
       return await finalizarLlamada(db, ctx, "no_contesta", 0);
     }
     return obtenerEstadoCola(db, ctx);
   } catch (e) {
-    st.mensaje = `Sin respuesta del teléfono: ${(e as Error).message}`;
+    if (e instanceof ErrorMovil && e.codigo === "NO_VINCULADO") {
+      preguntarResultado(`${e.message} Indica cómo terminó la llamada con ${actual.nombre} y vuelve a vincular el teléfono en «Teléfono».`);
+      st.pausada = true;
+      return obtenerEstadoCola(db, ctx);
+    }
+    if (!st.sinRespuestaDesde) st.sinRespuestaDesde = Date.now();
+    const s = segundosDesde(st.sinRespuestaDesde);
+    if (s >= SIN_SENAL_MAX_S) {
+      preguntarResultado(
+        `Se perdió la conexión con el teléfono por más de un minuto durante la llamada con ${actual.nombre}. Indica cómo terminó (los minutos son aproximados).`
+      );
+    } else {
+      st.mensaje = `Sin señal del teléfono hace ${s} s: ${(e as Error).message}`;
+    }
     return obtenerEstadoCola(db, ctx);
   } finally {
     st.ocupado = false;

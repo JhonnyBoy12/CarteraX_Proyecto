@@ -1,25 +1,76 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Phoenix Mobile</string>
-    <string name="subtitulo">Teléfono de llamadas para CarteraX</string>
-    <string name="titulo_conexion">Conexión con CarteraX</string>
-    <string name="ayuda_ip">Escribe esta dirección en CarteraX, sección Teléfono.</string>
-    <string name="copiar_ip">Copiar IP</string>
+    <string name="subtitulo">Teléfono de llamadas de CarteraX</string>
+
+    <!-- Estado (píldora de la cabecera) -->
+    <string name="estado_detenido">Detenido</string>
+    <string name="estado_error">Error de conexión</string>
+    <string name="estado_iniciando">Iniciando…</string>
+    <string name="estado_sin_permiso">Falta permiso</string>
+    <string name="estado_sin_vincular">Sin vincular</string>
+    <string name="estado_conectado">Conectado</string>
+    <string name="estado_esperando">Esperando</string>
+    <string name="sin_wifi">Sin Wi‑Fi</string>
+
+    <!-- Vinculación -->
+    <string name="titulo_vincular">Vincula con CarteraX</string>
+    <string name="ayuda_vincular">En CarteraX abre Teléfono, pulsa «Buscar teléfonos», elige este equipo y escribe este código.</string>
+    <string name="nuevo_codigo">Nuevo código</string>
+    <string name="vinculado_con">Vinculado con</string>
+    <string name="desvincular">Desvincular</string>
+    <string name="desvinculado">Teléfono desvinculado. Muestra un código nuevo.</string>
+    <string name="este_telefono">Este teléfono</string>
+    <string name="copiar_ip">Copiar</string>
+    <string name="ip_copiada">IP copiada: %1$s</string>
+    <string name="senal_reciente">Recibiendo órdenes · última señal hace %1$d s</string>
+    <string name="senal_esperando">CarteraX todavía no se comunica. Abre Teléfono en el computador o inicia la cola.</string>
+    <string name="senal_sin_wifi">Conecta el teléfono a la misma red Wi‑Fi que el computador.</string>
+    <string name="senal_detenido">El servicio está detenido. Ábrelo de nuevo para recibir llamadas.</string>
+
+    <!-- Llamada -->
     <string name="titulo_llamada">Llamada actual</string>
     <string name="sin_llamada">Sin llamada</string>
     <string name="esperando_orden">Cuando CarteraX envíe un número, la llamada se inicia sola con la SIM de este teléfono.</string>
+    <string name="llamada_carterax">Llamada desde CarteraX</string>
+    <string name="fase_marcando">Marcando</string>
+    <string name="fase_en_curso">En curso</string>
+    <string name="fase_contesto">Contestó</string>
+    <string name="fase_no_contesto">No contestó</string>
+    <string name="fase_fallo">No se pudo marcar</string>
+    <string name="fase_termino">Terminó</string>
     <string name="volver_llamar">Volver a llamar</string>
-    <string name="titulo_permisos">Permisos</string>
+    <string name="no_se_pudo_llamar">No se pudo iniciar la llamada.</string>
+
+    <!-- Para que no se corte -->
+    <string name="titulo_permisos">Para que no se corte</string>
+    <string name="ayuda_permisos">Con todo en verde, la cola registra sola si contestaron y cuántos minutos duró.</string>
     <string name="perm_llamadas">Realizar llamadas</string>
     <string name="perm_llamadas_ayuda">Obligatorio para marcar los números.</string>
     <string name="perm_estado">Estado del teléfono</string>
-    <string name="perm_estado_ayuda">Permite avisar a CarteraX cuándo termina la llamada.</string>
+    <string name="perm_estado_ayuda">Avisa a CarteraX cuándo empieza y termina la llamada.</string>
     <string name="perm_registro">Registro de llamadas</string>
-    <string name="perm_registro_ayuda">Permite saber si el cliente contestó y cuánto duró.</string>
-    <string name="conceder">Conceder</string>
+    <string name="perm_registro_ayuda">Indica si el cliente contestó y cuánto duró.</string>
+    <string name="perm_avisos">Notificaciones</string>
+    <string name="perm_avisos_ayuda">Muestra que Phoenix sigue activo mientras usas el marcador.</string>
+    <string name="perm_bateria">Batería sin restricción</string>
+    <string name="perm_bateria_ayuda">Evita que Android cierre Phoenix durante la llamada.</string>
+    <string name="conceder">Activar</string>
+    <string name="activa_en_ajustes">Activa el permiso en Ajustes &gt; Permisos.</string>
+    <string name="pantalla_encendida">Mantener la pantalla encendida</string>
+    <string name="pantalla_encendida_ayuda">Útil mientras corre la cola de llamadas.</string>
+
+    <!-- Últimas llamadas -->
     <string name="titulo_ordenes">Últimas llamadas</string>
     <string name="sin_ordenes">Todavía no se reciben llamadas en esta sesión.</string>
-    <string name="pantalla_encendida">Mantener la pantalla encendida</string>
-    <string name="pantalla_encendida_ayuda">Evita que el teléfono se suspenda mientras corre la cola de llamadas.</string>
-    <string name="pie">Mantén Phoenix Mobile abierta y en la misma red Wi‑Fi que el computador.</string>
+    <string name="pie">Phoenix sigue funcionando en segundo plano. Para detenerlo, usa «Detener» en la notificación.</string>
+
+    <!-- Servicio -->
+    <string name="canal_servicio">Phoenix activo</string>
+    <string name="canal_servicio_ayuda">Indica que Phoenix Mobile está recibiendo llamadas de CarteraX.</string>
+    <string name="notif_titulo">Phoenix Mobile activo</string>
+    <string name="notif_vinculado">Vinculado con %1$s · esperando llamadas</string>
+    <string name="notif_sin_vincular">Sin vincular: abre la app para ver el código</string>
+    <string name="notif_llamando">Llamando a %1$s</string>
+    <string name="notif_detener">Detener</string>
 </resources>

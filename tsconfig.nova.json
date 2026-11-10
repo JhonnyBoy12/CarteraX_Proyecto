@@ -1,0 +1,29 @@
+{
+  "//": "Interfaz Nova: scripts globales empaquetados en un solo dist/nova/nova.js. Reutiliza la lógica de la interfaz clásica (api, util, cola, importar, reportes, teléfono, ajustes, recordatorios) y reemplaza el núcleo, el tablero y la cartera.",
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "none",
+    "outFile": "dist/nova/nova.js",
+    "strict": true,
+    "skipLibCheck": true,
+    "removeComments": false
+  },
+  "files": [
+    "src/tipos/contratos.d.ts",
+    "src/renderer/api.ts",
+    "src/renderer/util.ts",
+    "src/renderer/graficos.ts",
+    "src/nova/graficos-nova.ts",
+    "src/nova/tablero.ts",
+    "src/nova/cartera.ts",
+    "src/renderer/vista-cola.ts",
+    "src/renderer/vista-reportes.ts",
+    "src/renderer/vista-importar.ts",
+    "src/renderer/vista-telefono.ts",
+    "src/renderer/vista-config.ts",
+    "src/renderer/vista-recordatorios.ts",
+    "src/nova/movimiento-nova.ts",
+    "src/nova/nucleo.ts"
+  ]
+}

@@ -269,7 +269,7 @@ const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
   });
 
   console.log("\nCola de llamadas (RF-30 a RF-32)");
-  const simulador = fork(path.join(__dirname, "..", "scripts", "simulador-movil.js"), ["--contesta=siempre", "--duracion=1"], { silent: true });
+  const simulador = fork(path.join(__dirname, "..", "scripts", "simulador-movil.js"), ["--contesta=siempre", "--duracion=1", "--codigo=123456"], { silent: true });
   // El simulador corre con el Node de Electron: puede tardar en abrir el puerto.
   const simuladorListo = async () => {
     for (let i = 0; i < 40; i++) {
@@ -279,8 +279,25 @@ const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
   };
   await simuladorListo();
   try {
+    await prueba("sin vincular, el teléfono responde pero no acepta órdenes", async () => {
+      const e = await r("movil:probar", "127.0.0.1");
+      assert.strictEqual(e.conectado, true);
+      assert.strictEqual(e.requiereVinculo, true);
+      await lanza(() => r("movil:llamar", "+56911112222", null), /no está vinculado|Primero vincula/);
+    });
+    await prueba("buscar teléfonos encuentra el simulador", async () => {
+      const lista = await r("movil:buscar");
+      assert.ok(lista.some((m) => m.idEquipo === "sim000000001" && m.admiteVinculo));
+    });
+    await prueba("un código incorrecto no vincula", () => lanza(() => r("movil:vincular", "127.0.0.1", "000000"), /incorrecto/));
+    await prueba("con el código correcto queda vinculado", async () => {
+      const e = await r("movil:vincular", "127.0.0.1", "123456");
+      assert.strictEqual(e.vinculado, true);
+      assert.strictEqual(e.requiereVinculo, false);
+      assert.strictEqual((await r("movil:probar")).vinculado, true);
+    });
     await prueba("sin clientes en cola no se puede iniciar", async () => {
-      await r("movil:probar", "127.0.0.1");
+      await r("movil:probar");
       await lanza(() => r("cola:iniciar"), /En cola/);
     });
     await prueba("enviar a la cola reactiva los teléfonos", () => {
@@ -332,9 +349,10 @@ const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
   console.log("\nCola sin registro de llamadas: minutos y motivos (v0.3.1)");
   await esperar(300);
-  const simSinRegistro = fork(path.join(__dirname, "..", "scripts", "simulador-movil.js"), ["--contesta=siempre", "--duracion=1", "--sin-registro"], { silent: true });
+  const simSinRegistro = fork(path.join(__dirname, "..", "scripts", "simulador-movil.js"), ["--contesta=siempre", "--duracion=1", "--sin-registro", "--codigo=654321"], { silent: true });
   await esperar(400);
   await simuladorListo();
+  await r("movil:vincular", "127.0.0.1", "654321");
   const esperarFin = async () => {
     let e = await r("cola:actualizar");
     for (let i = 0; i < 25 && !e.terminoSinDatos && e.proceso !== "FINALIZADA"; i++) {
@@ -389,6 +407,84 @@ const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
     });
   } finally {
     simSinRegistro.kill();
+  }
+
+  console.log("\nCortes rápidos, teléfono sin señal y versión anterior (v0.4)");
+  await esperar(300);
+  const simRapido = fork(path.join(__dirname, "..", "scripts", "simulador-movil.js"), ["--contesta=rapido", "--codigo=111111"], { silent: true });
+  await esperar(400);
+  await simuladorListo();
+  await r("movil:vincular", "127.0.0.1", "111111");
+  const llamarHastaTerminar = async (clienteId) => {
+    r("clientes:gestionar", { clienteIds: [clienteId], estado: "EN_COLA" });
+    let e = await r("cola:iniciar");
+    for (let i = 0; i < 40 && e.activa && e.actual && e.actual.clienteId === clienteId; i++) {
+      await esperar(300);
+      e = await r("cola:actualizar");
+    }
+    r("cola:detener");
+    return e;
+  };
+  try {
+    await prueba("una llamada que se corta en segundos queda como «apagado» (detectado)", async () => {
+      await llamarHastaTerminar(e3.id);
+      const l = r("movil:llamadas").find((x) => x.cliente_id === e3.id && x.motivo_llamada === "apagado");
+      assert.ok(l, "quedó como apagado");
+      assert.match(l.texto_libre, /detección automática/);
+    });
+    await prueba("al tercer corte rápido el número se descarta («no existe»)", async () => {
+      const antes = r("clientes:detalle", e3.id).telefonos.find((t) => t.valido);
+      for (let i = 0; i < 4; i++) {
+        const t = r("clientes:detalle", e3.id).telefonos.find((x) => x.numero === antes.numero);
+        if (!t.valido) break;
+        await llamarHastaTerminar(e3.id);
+      }
+      const t = r("clientes:detalle", e3.id).telefonos.find((x) => x.numero === antes.numero);
+      assert.strictEqual(t.valido, false);
+      assert.ok(r("movil:llamadas").some((x) => x.motivo_llamada === "inexistente" && /detección automática/.test(x.texto_libre)));
+    });
+  } finally {
+    simRapido.kill();
+  }
+
+  await esperar(300);
+  const simSinSenal = fork(path.join(__dirname, "..", "scripts", "simulador-movil.js"), ["--no-marca", "--codigo=222222"], { silent: true });
+  await esperar(400);
+  await simuladorListo();
+  await r("movil:vincular", "127.0.0.1", "222222");
+  try {
+    await prueba("si el teléfono no puede marcar, la cola se pausa y el número sigue pendiente", async () => {
+      r("clientes:gestionar", { clienteIds: [e2.id], estado: "EN_COLA" });
+      let e = await r("cola:iniciar");
+      for (let i = 0; i < 20 && e.proceso !== "ERROR"; i++) {
+        await esperar(300);
+        e = await r("cola:actualizar");
+      }
+      assert.strictEqual(e.proceso, "ERROR");
+      assert.match(e.mensaje, /no pudo marcar/);
+      const f = r("clientes:detalle", e2.id);
+      assert.ok(f.telefonos.some((t) => t.valido && t.estadoLlamada === "PENDIENTE"));
+      r("cola:detener");
+    });
+  } finally {
+    simSinSenal.kill();
+  }
+
+  await esperar(300);
+  const simAnterior = fork(path.join(__dirname, "..", "scripts", "simulador-movil.js"), ["--sin-vinculo", "--contesta=siempre", "--duracion=1"], { silent: true });
+  await esperar(400);
+  await simuladorListo();
+  try {
+    await prueba("Phoenix Mobile 0.3 (sin código) se sigue conectando por IP", async () => {
+      const e = await r("movil:probar", "127.0.0.1");
+      assert.strictEqual(e.conectado, true);
+      assert.ok(!e.requiereVinculo);
+      const l = await r("movil:llamar", "+56933334444", null);
+      assert.ok(l.gestionId);
+      r("movil:descartar-seguimiento");
+    });
+  } finally {
+    simAnterior.kill();
   }
 
   console.log("\nReportes mensuales (RF-25)");

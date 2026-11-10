@@ -8,6 +8,11 @@ import Database from "better-sqlite3";
 /** Claves conocidas (evita errores de tipeo). */
 export const CLAVES = {
   MOVIL_IP: "movil.ip",
+  /** Token del vínculo con Phoenix Mobile 0.4+ (código de 6 dígitos). */
+  MOVIL_TOKEN: "movil.token",
+  /** Identificador estable del teléfono, para reencontrarlo si cambia de IP. */
+  MOVIL_EQUIPO: "movil.equipo",
+  MOVIL_NOMBRE: "movil.nombre",
   META_MENSUAL: "app.meta_mensual",
   DIAS_SIN_GESTION: "app.dias_sin_gestion",
   INACTIVIDAD_MINUTOS: "app.inactividad_minutos",

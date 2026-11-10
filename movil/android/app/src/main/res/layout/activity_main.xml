@@ -1,392 +1,175 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  Phoenix Mobile — pantalla principal.
-  Orden de lectura: ¿estoy conectado? → ¿qué estoy llamando? → ¿me falta algún permiso? → historial.
-  Misma identidad que CarteraX de escritorio: cabecera grafito, franja de estados
-  de cobranza y naranja sólo para acciones. Los ids los usa MainActivity.
--->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Phoenix Mobile v0.4: azul noche (oscuro) o papel cálido (claro) con acento naranjo,
+     igual que la interfaz moderna de CarteraX. -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/fondo"
-    android:orientation="vertical">
+    android:fillViewport="true">
 
-    <!-- Cabecera de marca -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/grafito"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="18dp"
-        android:paddingTop="14dp"
-        android:paddingEnd="18dp"
-        android:paddingBottom="16dp">
+        android:orientation="vertical"
+        android:paddingStart="20dp"
+        android:paddingTop="20dp"
+        android:paddingEnd="20dp"
+        android:paddingBottom="28dp">
 
-        <ImageView
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:contentDescription="@null"
-            android:src="@mipmap/ic_launcher" />
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:layout_weight="1"
-            android:orientation="vertical">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="sans-serif-condensed"
-                android:text="@string/app_name"
-                android:textColor="@color/blanco"
-                android:textSize="21sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/subtitulo"
-                android:textColor="@color/grafito_tenue"
-                android:textSize="13sp" />
-        </LinearLayout>
-    </LinearLayout>
-
-    <!-- Franja de estados de cobranza: la misma que encabeza el dashboard de CarteraX. -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="4dp"
-        android:importantForAccessibility="no"
-        android:orientation="horizontal">
-
-        <View style="@style/Phoenix.Franja" android:layout_weight="30" android:background="@color/tono_verde" />
-        <View style="@style/Phoenix.Franja" android:layout_weight="4" android:background="@color/tono_verde_claro" />
-        <View style="@style/Phoenix.Franja" android:layout_weight="7" android:background="@color/tono_naranja" />
-        <View style="@style/Phoenix.Franja" android:layout_weight="6" android:background="@color/tono_celeste" />
-        <View style="@style/Phoenix.Franja" android:layout_weight="19" android:background="@color/tono_violeta" />
-        <View style="@style/Phoenix.Franja" android:layout_weight="13" android:background="@color/tono_azul" />
-        <View style="@style/Phoenix.Franja" android:layout_weight="10" android:background="@color/tono_ambar" />
-        <View style="@style/Phoenix.Franja" android:layout_weight="4" android:background="@color/tono_rojo_fuerte" />
-        <View style="@style/Phoenix.Franja" android:layout_weight="7" android:background="@color/gris_estado" />
-    </LinearLayout>
-
-    <ScrollView
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:clipToPadding="false"
-        android:paddingStart="12dp"
-        android:paddingTop="12dp"
-        android:paddingEnd="12dp">
-
+        <!-- ===================== Cabecera ===================== -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:animateLayoutChanges="true"
-            android:orientation="vertical">
+            android:layout_marginBottom="20dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-            <!-- ============ Conexión ============ -->
-            <com.google.android.material.card.MaterialCardView
+            <ImageView
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:layout_marginEnd="12dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_marca" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/app_name"
+                    android:textColor="@color/tinta"
+                    android:textSize="19sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    style="@style/Phoenix.Rotulo"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/subtitulo" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/fondo_pildora"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="12dp"
+                android:paddingTop="7dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="7dp">
+
+                <View
+                    android:id="@+id/puntoConexion"
+                    android:layout_width="8dp"
+                    android:layout_height="8dp"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/punto_estado" />
+
+                <TextView
+                    android:id="@+id/txtConexion"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/tinta"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ===================== Vinculación ===================== -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="14dp">
+
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="10dp">
+                android:animateLayoutChanges="true"
+                android:orientation="vertical">
 
+                <!-- Sin vincular: el código de 6 dígitos -->
                 <LinearLayout
+                    android:id="@+id/grupoSinVincular"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:animateLayoutChanges="true"
-                    android:orientation="vertical"
-                    android:padding="16dp">
+                    android:orientation="vertical">
 
                     <TextView
                         style="@style/Phoenix.TituloTarjeta"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/titulo_conexion" />
+                        android:text="@string/titulo_vincular" />
+
+                    <TextView
+                        style="@style/Phoenix.Ayuda"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/ayuda_vincular" />
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
+                        android:layout_marginTop="18dp"
+                        android:layout_marginStart="-4dp"
+                        android:layout_marginEnd="-4dp"
+                        android:gravity="center"
                         android:orientation="horizontal">
+
+                        <TextView android:id="@+id/d1" style="@style/Phoenix.Digito" />
+                        <TextView android:id="@+id/d2" style="@style/Phoenix.Digito" />
+                        <TextView android:id="@+id/d3" style="@style/Phoenix.Digito" />
 
                         <View
-                            android:id="@+id/puntoEstado"
-                            android:layout_width="12dp"
-                            android:layout_height="12dp"
-                            android:background="@drawable/punto_estado" />
+                            android:layout_width="10dp"
+                            android:layout_height="2dp"
+                            android:layout_marginStart="2dp"
+                            android:layout_marginEnd="2dp"
+                            android:background="@color/linea_fuerte" />
 
-                        <TextView
-                            android:id="@+id/txtEstado"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="10dp"
-                            android:layout_weight="1"
-                            android:fontFamily="sans-serif-condensed"
-                            android:text="Iniciando…"
-                            android:textColor="@color/tinta"
-                            android:textSize="21sp"
-                            android:textStyle="bold" />
-                    </LinearLayout>
-
-                    <TextView
-                        android:id="@+id/txtDetalleEstado"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="22dp"
-                        android:layout_marginTop="2dp"
-                        android:textColor="@color/pizarra"
-                        android:textSize="14sp" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        android:background="@drawable/fondo_ip"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:paddingStart="14dp"
-                        android:paddingTop="10dp"
-                        android:paddingEnd="6dp"
-                        android:paddingBottom="10dp">
-
-                        <!-- La IP siempre en una línea: la letra se achica sola
-                             (28 → 16 sp) si la dirección no cabe junto a «Copiar IP». -->
-                        <TextView
-                            android:id="@+id/txtIp"
-                            android:layout_width="0dp"
-                            android:layout_height="38dp"
-                            android:layout_weight="1"
-                            android:autoSizeMaxTextSize="28sp"
-                            android:autoSizeMinTextSize="16sp"
-                            android:autoSizeStepGranularity="1sp"
-                            android:autoSizeTextType="uniform"
-                            android:ellipsize="none"
-                            android:fontFamily="sans-serif-condensed"
-                            android:fontFeatureSettings="tnum"
-                            android:gravity="center_vertical"
-                            android:maxLines="1"
-                            android:textColor="@color/tinta"
-                            android:textIsSelectable="true"
-                            android:textSize="28sp"
-                            android:textStyle="bold" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnCopiarIp"
-                            style="@style/Phoenix.BotonTexto"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/copiar_ip" />
-                    </LinearLayout>
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:text="@string/ayuda_ip"
-                        android:textColor="@color/pizarra"
-                        android:textSize="13sp" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- ============ Llamada actual ============ -->
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/tarjetaLlamada"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="10dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:animateLayoutChanges="true"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            style="@style/Phoenix.TituloTarjeta"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_marginBottom="0dp"
-                            android:layout_weight="1"
-                            android:text="@string/titulo_llamada" />
-
-                        <TextView
-                            android:id="@+id/chipLlamada"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:background="@drawable/fondo_chip"
-                            android:paddingStart="12dp"
-                            android:paddingTop="4dp"
-                            android:paddingEnd="12dp"
-                            android:paddingBottom="4dp"
-                            android:text="@string/sin_llamada"
-                            android:textColor="@color/pizarra"
-                            android:textSize="13sp"
-                            android:textStyle="bold" />
-                    </LinearLayout>
-
-                    <TextView
-                        android:id="@+id/txtCliente"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:fontFamily="sans-serif-condensed"
-                        android:text="@string/esperando_orden"
-                        android:textColor="@color/pizarra"
-                        android:textSize="15sp"
-                        android:textStyle="bold" />
-
-                    <LinearLayout
-                        android:id="@+id/filaNumero"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:visibility="gone">
-
-                        <TextView
-                            android:id="@+id/txtNumero"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:fontFeatureSettings="tnum"
-                            android:textColor="@color/pizarra"
-                            android:textSize="18sp" />
-
-                        <Chronometer
-                            android:id="@+id/cronometro"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="sans-serif-condensed"
-                            android:fontFeatureSettings="tnum"
-                            android:textColor="@color/tinta"
-                            android:textSize="26sp"
-                            android:textStyle="bold" />
+                        <TextView android:id="@+id/d4" style="@style/Phoenix.Digito" />
+                        <TextView android:id="@+id/d5" style="@style/Phoenix.Digito" />
+                        <TextView android:id="@+id/d6" style="@style/Phoenix.Digito" />
                     </LinearLayout>
 
                     <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnVolverLlamar"
-                        style="@style/Phoenix.BotonContorno"
+                        android:id="@+id/btnNuevoCodigo"
+                        style="@style/Phoenix.BotonTexto"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:text="@string/volver_llamar"
-                        android:visibility="gone" />
+                        android:layout_gravity="center_horizontal"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/nuevo_codigo" />
                 </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
 
-            <!-- ============ Permisos ============ -->
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="10dp">
-
+                <!-- Vinculado -->
                 <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:paddingStart="16dp"
-                    android:paddingTop="16dp"
-                    android:paddingEnd="8dp"
-                    android:paddingBottom="10dp">
-
-                    <TextView
-                        style="@style/Phoenix.TituloTarjeta"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginBottom="4dp"
-                        android:text="@string/titulo_permisos" />
-
-                    <LinearLayout style="@style/Phoenix.FilaPermiso">
-                        <View android:id="@+id/puntoPermLlamadas" android:layout_width="10dp" android:layout_height="10dp" android:background="@drawable/punto_estado" />
-                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="12dp" android:layout_weight="1" android:orientation="vertical">
-                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/perm_llamadas" android:textColor="@color/tinta" android:textSize="15sp" android:textStyle="bold" />
-                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/perm_llamadas_ayuda" android:textColor="@color/pizarra" android:textSize="13sp" />
-                        </LinearLayout>
-                        <com.google.android.material.button.MaterialButton android:id="@+id/btnPermLlamadas" style="@style/Phoenix.BotonTexto" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/conceder" />
-                    </LinearLayout>
-
-                    <LinearLayout style="@style/Phoenix.FilaPermiso">
-                        <View android:id="@+id/puntoPermEstado" android:layout_width="10dp" android:layout_height="10dp" android:background="@drawable/punto_estado" />
-                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="12dp" android:layout_weight="1" android:orientation="vertical">
-                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/perm_estado" android:textColor="@color/tinta" android:textSize="15sp" android:textStyle="bold" />
-                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/perm_estado_ayuda" android:textColor="@color/pizarra" android:textSize="13sp" />
-                        </LinearLayout>
-                        <com.google.android.material.button.MaterialButton android:id="@+id/btnPermEstado" style="@style/Phoenix.BotonTexto" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/conceder" />
-                    </LinearLayout>
-
-                    <LinearLayout style="@style/Phoenix.FilaPermiso">
-                        <View android:id="@+id/puntoPermRegistro" android:layout_width="10dp" android:layout_height="10dp" android:background="@drawable/punto_estado" />
-                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="12dp" android:layout_weight="1" android:orientation="vertical">
-                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/perm_registro" android:textColor="@color/tinta" android:textSize="15sp" android:textStyle="bold" />
-                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/perm_registro_ayuda" android:textColor="@color/pizarra" android:textSize="13sp" />
-                        </LinearLayout>
-                        <com.google.android.material.button.MaterialButton android:id="@+id/btnPermRegistro" style="@style/Phoenix.BotonTexto" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/conceder" />
-                    </LinearLayout>
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- ============ Últimas llamadas ============ -->
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="10dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <TextView
-                        style="@style/Phoenix.TituloTarjeta"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginBottom="6dp"
-                        android:text="@string/titulo_ordenes" />
-
-                    <TextView
-                        android:id="@+id/txtSinOrdenes"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/sin_ordenes"
-                        android:textColor="@color/pizarra"
-                        android:textSize="14sp" />
-
-                    <LinearLayout
-                        android:id="@+id/listaOrdenes"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:animateLayoutChanges="true"
-                        android:divider="@drawable/divisor"
-                        android:orientation="vertical"
-                        android:showDividers="middle" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- ============ Preferencias ============ -->
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="10dp">
-
-                <LinearLayout
+                    android:id="@+id/grupoVinculado"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:gravity="center_vertical"
                     android:orientation="horizontal"
-                    android:padding="16dp">
+                    android:visibility="gone">
+
+                    <FrameLayout
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginEnd="14dp"
+                        android:background="@drawable/fondo_vinculado">
+
+                        <ImageView
+                            android:layout_width="22dp"
+                            android:layout_height="22dp"
+                            android:layout_gravity="center"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_check" />
+                    </FrameLayout>
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -394,29 +177,301 @@
                         android:layout_weight="1"
                         android:orientation="vertical">
 
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/pantalla_encendida" android:textColor="@color/tinta" android:textSize="15sp" android:textStyle="bold" />
-                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/pantalla_encendida_ayuda" android:textColor="@color/pizarra" android:textSize="13sp" />
+                        <TextView
+                            style="@style/Phoenix.Rotulo"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/vinculado_con" />
+
+                        <TextView
+                            android:id="@+id/txtVinculadoCon"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="end"
+                            android:maxLines="1"
+                            android:textColor="@color/tinta"
+                            android:textSize="17sp"
+                            android:textStyle="bold" />
                     </LinearLayout>
 
-                    <com.google.android.material.switchmaterial.SwitchMaterial
-                        android:id="@+id/switchPantalla"
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnDesvincular"
+                        style="@style/Phoenix.BotonContorno"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp" />
+                        android:text="@string/desvincular" />
                 </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
 
-            <TextView
+                <TextView
+                    android:id="@+id/txtUltimaSenal"
+                    style="@style/Phoenix.Ayuda"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp" />
+
+                <!-- IP del teléfono (por si hay que escribirla a mano) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/fondo_ip"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="14dp"
+                    android:paddingTop="4dp"
+                    android:paddingEnd="4dp"
+                    android:paddingBottom="4dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            style="@style/Phoenix.Rotulo"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/este_telefono" />
+
+                        <TextView
+                            android:id="@+id/txtIp"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="monospace"
+                            android:textColor="@color/tinta"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnCopiarIp"
+                        style="@style/Phoenix.BotonTexto"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/copiar_ip" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ===================== Llamada actual ===================== -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="14dp">
+
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:layout_marginBottom="16dp"
-                android:gravity="center"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp"
-                android:text="@string/pie"
-                android:textColor="@color/pizarra"
-                android:textSize="13sp" />
-        </LinearLayout>
-    </ScrollView>
-</LinearLayout>
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        style="@style/Phoenix.TituloTarjeta"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/titulo_llamada" />
+
+                    <TextView
+                        android:id="@+id/chipLlamada"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/fondo_chip"
+                        android:paddingStart="12dp"
+                        android:paddingTop="5dp"
+                        android:paddingEnd="12dp"
+                        android:paddingBottom="5dp"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/txtCliente"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:lineSpacingExtra="2dp" />
+
+                <LinearLayout
+                    android:id="@+id/filaNumero"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/txtNumero"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:fontFamily="monospace"
+                        android:textColor="@color/tinta_3"
+                        android:textSize="15sp" />
+
+                    <Chronometer
+                        android:id="@+id/cronometro"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFeatureSettings="tnum"
+                        android:textColor="@color/tinta"
+                        android:textSize="26sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnVolverLlamar"
+                    style="@style/Phoenix.BotonContorno"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:text="@string/volver_llamar"
+                    android:visibility="gone" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ===================== Para que no se corte ===================== -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="14dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/Phoenix.TituloTarjeta"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/titulo_permisos" />
+
+                <TextView
+                    style="@style/Phoenix.Ayuda"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginBottom="6dp"
+                    android:text="@string/ayuda_permisos" />
+
+                <LinearLayout style="@style/Phoenix.FilaPermiso">
+                    <View android:id="@+id/puntoPermLlamadas" style="@style/Phoenix.PuntoPermiso" />
+                    <LinearLayout style="@style/Phoenix.TextosPermiso">
+                        <TextView style="@style/Phoenix.NombrePermiso" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/perm_llamadas" />
+                        <TextView style="@style/Phoenix.Ayuda" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/perm_llamadas_ayuda" />
+                    </LinearLayout>
+                    <com.google.android.material.button.MaterialButton android:id="@+id/btnPermLlamadas" style="@style/Phoenix.BotonSuave" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/conceder" />
+                </LinearLayout>
+
+                <LinearLayout style="@style/Phoenix.FilaPermiso">
+                    <View android:id="@+id/puntoPermEstado" style="@style/Phoenix.PuntoPermiso" />
+                    <LinearLayout style="@style/Phoenix.TextosPermiso">
+                        <TextView style="@style/Phoenix.NombrePermiso" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/perm_estado" />
+                        <TextView style="@style/Phoenix.Ayuda" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/perm_estado_ayuda" />
+                    </LinearLayout>
+                    <com.google.android.material.button.MaterialButton android:id="@+id/btnPermEstado" style="@style/Phoenix.BotonSuave" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/conceder" />
+                </LinearLayout>
+
+                <LinearLayout style="@style/Phoenix.FilaPermiso">
+                    <View android:id="@+id/puntoPermRegistro" style="@style/Phoenix.PuntoPermiso" />
+                    <LinearLayout style="@style/Phoenix.TextosPermiso">
+                        <TextView style="@style/Phoenix.NombrePermiso" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/perm_registro" />
+                        <TextView style="@style/Phoenix.Ayuda" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/perm_registro_ayuda" />
+                    </LinearLayout>
+                    <com.google.android.material.button.MaterialButton android:id="@+id/btnPermRegistro" style="@style/Phoenix.BotonSuave" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/conceder" />
+                </LinearLayout>
+
+                <LinearLayout android:id="@+id/filaPermAvisos" style="@style/Phoenix.FilaPermiso">
+                    <View android:id="@+id/puntoPermAvisos" style="@style/Phoenix.PuntoPermiso" />
+                    <LinearLayout style="@style/Phoenix.TextosPermiso">
+                        <TextView style="@style/Phoenix.NombrePermiso" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/perm_avisos" />
+                        <TextView style="@style/Phoenix.Ayuda" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/perm_avisos_ayuda" />
+                    </LinearLayout>
+                    <com.google.android.material.button.MaterialButton android:id="@+id/btnPermAvisos" style="@style/Phoenix.BotonSuave" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/conceder" />
+                </LinearLayout>
+
+                <LinearLayout style="@style/Phoenix.FilaPermiso">
+                    <View android:id="@+id/puntoPermBateria" style="@style/Phoenix.PuntoPermiso" />
+                    <LinearLayout style="@style/Phoenix.TextosPermiso">
+                        <TextView style="@style/Phoenix.NombrePermiso" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/perm_bateria" />
+                        <TextView style="@style/Phoenix.Ayuda" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/perm_bateria_ayuda" />
+                    </LinearLayout>
+                    <com.google.android.material.button.MaterialButton android:id="@+id/btnPermBateria" style="@style/Phoenix.BotonSuave" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/conceder" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="4dp"
+                    android:background="@color/linea" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/switchPantalla"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="56dp"
+                    android:text="@string/pantalla_encendida"
+                    android:textColor="@color/tinta"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    style="@style/Phoenix.Ayuda"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="-8dp"
+                    android:text="@string/pantalla_encendida_ayuda" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ===================== Últimas llamadas ===================== -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/Phoenix.TituloTarjeta"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="4dp"
+                    android:text="@string/titulo_ordenes" />
+
+                <TextView
+                    android:id="@+id/txtSinOrdenes"
+                    style="@style/Phoenix.Ayuda"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/sin_ordenes" />
+
+                <LinearLayout
+                    android:id="@+id/listaOrdenes"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <TextView
+            style="@style/Phoenix.Ayuda"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="@string/pie" />
+    </LinearLayout>
+</ScrollView>

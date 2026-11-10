@@ -61,6 +61,8 @@ Luego borra la carpeta `node_modules` y repite `npm install`.
 
 Para cerrar, cierra la ventana. Las próximas veces basta con `npm start`.
 
+La app abre siempre la interfaz moderna (ver [NOVA.md](NOVA.md)).
+
 ### 3. Generar el ejecutable (.exe) e instalarlo
 
 Con las dependencias ya instaladas (paso 2.4), en la misma terminal:
@@ -93,7 +95,7 @@ activa el *Modo de desarrollador* de Windows y repite.
 | Comando | Para qué |
 |---|---|
 | `npm run prueba` | Ejecuta las pruebas automáticas (deben terminar en 0 fallas). |
-| `npm run simulador-movil` | Simula el teléfono Android en otra terminal; en la app, *Teléfono* → IP `127.0.0.1`. |
+| `npm run simulador-movil` | Simula el teléfono Android en otra terminal; en la app, *Teléfono* → *Buscar teléfonos* y escribe el código que muestra la terminal. |
 
 ### Si algo falla
 
@@ -185,12 +187,20 @@ gestión (15). Los casos cerrados valen 0. La cola y el orden por defecto lo usa
 
 ## Phoenix Mobile (Android)
 
-1. Instala el APK y abre la app. Concede los tres permisos: llamadas, estado
-   del teléfono y registro de llamadas (los dos últimos permiten saber si el
-   cliente contestó).
+1. Instala el APK (`PhoenixMobile-0.4.0.apk`) y abre la app. Deja todo en
+   verde en «Para que no se corte»: llamadas, estado del teléfono, registro de
+   llamadas, notificaciones y batería sin restricción.
 2. Conecta el teléfono y el computador a la misma Wi‑Fi.
-3. En CarteraX → **Teléfono**, escribe la IP que muestra la app y pulsa
-   **Probar conexión**.
+3. En CarteraX → **Teléfono**, pulsa **Buscar teléfonos**, elige el tuyo y
+   escribe el código de 6 dígitos que muestra la app. Desde ese momento el
+   teléfono sólo recibe llamadas de este computador.
+
+La app sigue funcionando en segundo plano mientras el marcador está abierto,
+así que la cola registra sola si contestaron y los minutos. Si el teléfono se
+corta, se reinicia o pierde la Wi‑Fi, la cola pide el resultado en vez de
+quedarse esperando. Las llamadas que se cortan sin sonar en pocos segundos
+quedan como «apagado o sin cobertura», y a la tercera vez ese número se
+descarta como inexistente (se puede reactivar en la ficha).
 
 Para compilarla: abre `movil/android` en Android Studio. Detalles en
 [`movil/android/README_ANDROID.md`](movil/android/README_ANDROID.md).
@@ -205,7 +215,7 @@ Requisitos: Node.js 22 (ver `.nvmrc`).
 | `npm start` | Compila y abre la app |
 | `npm run prueba` | 37 pruebas del cargador + 58 de reglas de negocio + 1 de importación segura |
 | `npm run capturas` | Regenera las capturas de diseño en `docs/capturas/diseno/` (base temporal) |
-| `npm run simulador-movil` | Simula Phoenix Mobile (IP 127.0.0.1). Opciones: `--contesta=siempre\|nunca`, `--sin-seguimiento`, `--sin-permiso` |
+| `npm run simulador-movil` | Simula Phoenix Mobile. Opciones: `--codigo=123456`, `--contesta=siempre\|nunca\|rapido`, `--no-marca`, `--sin-vinculo`, `--sin-seguimiento`, `--sin-permiso` |
 | `npm run dist:win` / `dist:mac` / `dist:linux` | Genera el instalador en `release/` |
 | `npm run ejemplos` | Regenera los archivos de `ejemplos/` (datos ficticios) |
 

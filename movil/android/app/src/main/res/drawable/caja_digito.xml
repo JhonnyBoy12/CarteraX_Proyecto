@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Casilla de un dígito del código de vinculación. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <corners android:radius="14dp" />
+    <solid android:color="@color/superficie_2" />
+    <stroke android:width="1.5dp" android:color="@color/acento_borde" />
+</shape>

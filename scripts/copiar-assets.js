@@ -11,6 +11,10 @@ const copias = [
   ["src/renderer/index.html", "dist/renderer/index.html"],
   ["src/renderer/styles.css", "dist/renderer/styles.css"],
   ["src/renderer/assets", "dist/renderer/assets"],
+  // Interfaz Nova (el JS lo genera tsconfig.nova.json en dist/nova/nova.js).
+  ["src/nova/index.html", "dist/nova/index.html"],
+  ["src/nova/nova.css", "dist/nova/nova.css"],
+  ["src/renderer/assets", "dist/nova/assets"],
 ];
 
 // fs.cpSync de Node 22 falla al sobrescribir en carpetas de OneDrive

@@ -4,7 +4,7 @@
   "description": "CarteraX Phoenix: gestiÃ³n de cartera y cobranza para ejecutivos, con cola de llamadas vÃ­a Phoenix Mobile",
   "main": "dist/main.js",
   "scripts": {
-    "build": "tsc && node scripts/copiar-assets.js",
+    "build": "tsc && tsc -p tsconfig.nova.json && node scripts/copiar-assets.js",
     "start": "npm run build && electron .",
     "dev": "npm run build && electron .",
     "simulador-movil": "node scripts/simulador-movil.js",
@@ -19,8 +19,10 @@
     "postinstall": "electron-rebuild -f -w better-sqlite3",
     "servidor": "npm run build:compatibilidad && node compatibilidad/main-anterior/scripts/servidor.js",
     "build:compatibilidad": "tsc -p compatibilidad/main-anterior/tsconfig.json && node compatibilidad/main-anterior/scripts/copiar-assets.js",
-    "capturas": "npm run build && electron scripts/capturar-pantallas.js",
-    "prueba:importacion": "npm run build && node scripts/ejecutar-con-electron.js pruebas/importacion-segura.prueba.js"
+    "capturas": "npm run build && electron scripts/capturar-pantallas.js docs/capturas/diseno --clasica",
+    "prueba:importacion": "npm run build && node scripts/ejecutar-con-electron.js pruebas/importacion-segura.prueba.js",
+    "clasica": "npm run build && electron . --clasica",
+    "capturas:nova": "npm run build && electron scripts/capturar-pantallas.js docs/capturas/nova"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.2.0",

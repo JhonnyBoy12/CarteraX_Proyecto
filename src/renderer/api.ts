@@ -71,6 +71,9 @@ const Api = {
   // Teléfono
   movil: () => invocar<{ ip: string | null }>("movil:obtener"),
   probarMovil: (ip?: string) => invocar<Phoenix.EstadoMovil>("movil:probar", ip),
+  buscarMoviles: () => invocar<Phoenix.MovilEncontrado[]>("movil:buscar"),
+  vincularMovil: (ip: string, codigo: string) => invocar<Phoenix.EstadoMovil>("movil:vincular", ip, codigo),
+  desvincularMovil: () => invocar<boolean>("movil:desvincular"),
   llamar: (numero: string, clienteId?: string | null) =>
     invocar<Phoenix.ResultadoLlamada & { seguimiento?: Phoenix.SeguimientoLlamada | null }>("movil:llamar", numero, clienteId ?? null),
   llamadas: () => invocar<Phoenix.LlamadaRegistrada[]>("movil:llamadas"),

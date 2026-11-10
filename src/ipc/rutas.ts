@@ -206,6 +206,21 @@ export function crearRutas(obtenerDb: () => Database.Database, plataforma: Plata
     // --------------------------- Phoenix Mobile ---------------------------
     "movil:obtener": () => ({ ip: movil.obtenerIpMovil(obtenerDb()) }),
     "movil:probar": (ip?: string) => movil.probarMovil(obtenerDb(), ip),
+    // v0.4: vínculo con código de 6 dígitos (cada teléfono obedece sólo a su computador).
+    "movil:buscar": () => {
+      exigirSesion();
+      return movil.buscarMovil(obtenerDb());
+    },
+    "movil:vincular": (ip: string, codigo: string) => {
+      exigirSesion();
+      if (cola.colaActiva()) throw new Error("Detén la cola antes de vincular otro teléfono.");
+      return movil.vincularMovil(obtenerDb(), String(ip ?? ""), String(codigo ?? ""));
+    },
+    "movil:desvincular": () => {
+      exigirSesion();
+      if (cola.colaActiva()) throw new Error("Detén la cola antes de desvincular el teléfono.");
+      return movil.desvincularMovil(obtenerDb());
+    },
     // Con la cola en marcha el teléfono lo sigue la cola: llamada simple, como en v0.3.0.
     "movil:llamar": (numero: string, clienteId?: string | null) =>
       cola.colaActiva()

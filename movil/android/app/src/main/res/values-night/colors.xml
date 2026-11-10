@@ -1,19 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Tema oscuro: mismos nombres que values/colors.xml (MainActivity los usa por id). -->
+<!-- Tema oscuro: azul noche en escalones sólidos, como el escritorio. -->
 <resources>
-    <color name="phoenix_naranja">#EC8A44</color>
-    <color name="phoenix_naranja_hondo">#FFA86B</color>
-    <color name="phoenix_naranja_suave">#3B2617</color>
-    <color name="tinta">#E8ECF6</color>
-    <color name="pizarra">#A3ADC8</color>
-    <color name="linea">#2A3352</color>
-    <color name="fondo">#0F1426</color>
-    <color name="superficie">#161D33</color>
-    <color name="superficie_2">#1C2440</color>
-    <color name="positivo">#4CBF78</color>
-    <color name="positivo_suave">#15301F</color>
-    <color name="alerta">#F2665B</color>
-    <color name="alerta_suave">#3B1D1B</color>
+    <color name="fondo">#0C1019</color>
+    <color name="superficie">#131826</color>
+    <color name="superficie_2">#1A2030</color>
+    <color name="superficie_3">#232A3D</color>
+    <color name="linea">#232A3B</color>
+    <color name="linea_fuerte">#353E55</color>
+    <color name="tinta">#EEF1F7</color>
+    <color name="tinta_2">#C4CBDB</color>
+    <color name="tinta_3">#9CA5BA</color>
+
+    <color name="acento">#FF7A1A</color>
+    <color name="acento_hondo">#FFA766</color>
+    <color name="acento_suave">#33241A</color>
+    <color name="acento_borde">#7A4519</color>
+
+    <color name="positivo">#3ED68E</color>
+    <color name="positivo_suave">#10291F</color>
+    <color name="aviso">#F4C04A</color>
+    <color name="alerta">#FF6B6B</color>
+    <color name="alerta_suave">#331A20</color>
     <color name="gris_estado">#7D8793</color>
-    <color name="grafito">#0A0F1E</color>
 </resources>

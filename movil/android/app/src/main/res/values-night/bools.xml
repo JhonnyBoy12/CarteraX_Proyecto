@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Íconos claros en la barra de estado sobre el azul noche. -->
+    <bool name="barra_clara">false</bool>
+</resources>

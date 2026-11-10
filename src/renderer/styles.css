@@ -1221,3 +1221,11 @@ th { box-shadow: 0 1px 0 var(--linea); }
   .contenido { padding: 16px 16px 40px; }
   .barra-superior { padding: 8px 16px; }
 }
+
+/* Vinculación con código (Phoenix Mobile 0.4) */
+.lista-moviles { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
+.lista-moviles button { width: 100%; display: flex; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--linea, #dce0ea); border-radius: 8px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.panel-codigo { margin-top: 12px; }
+.otp { display: flex; gap: 8px; margin: 10px 0; }
+.otp input { width: 44px; height: 52px; text-align: center; font-size: 22px; font-weight: 700; }
+.ip-manual { margin-top: 12px; }

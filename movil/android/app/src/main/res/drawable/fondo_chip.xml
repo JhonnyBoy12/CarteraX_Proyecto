@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Píldora; el color se cambia por código con backgroundTintList. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
     <corners android:radius="999dp" />
-    <solid android:color="@color/fondo" />
+    <solid android:color="@color/superficie_2" />
 </shape>

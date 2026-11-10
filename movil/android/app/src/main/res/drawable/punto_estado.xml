@@ -2,5 +2,5 @@
 <!-- Punto de estado; el color se cambia por código con backgroundTintList. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
     <solid android:color="@color/gris_estado" />
-    <size android:width="12dp" android:height="12dp" />
+    <size android:width="10dp" android:height="10dp" />
 </shape>

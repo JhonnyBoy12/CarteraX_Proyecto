@@ -18,6 +18,22 @@ let ventanaPrincipal: BrowserWindow | null = null;
 let db: Database.Database | null = null;
 let alSalir: (() => void) | null = null;
 
+/**
+ * La app abre siempre la interfaz moderna (dist/nova). La clásica
+ * (dist/renderer) queda sólo para desarrollo: --clasica o CARTERAX_UI=clasica.
+ */
+type Interfaz = "renderer" | "nova";
+let interfaz: Interfaz = "nova";
+
+function interfazInicial(): Interfaz {
+  if (process.argv.includes("--clasica") || process.env.CARTERAX_UI === "clasica") return "renderer";
+  return "nova";
+}
+
+function fondoInterfaz(): string {
+  return interfaz === "nova" ? "#0c1019" : "#f5f3f0";
+}
+
 /** Base local en la carpeta de datos del usuario (ej. %APPDATA%/CarteraX Phoenix). */
 function rutaBaseDatos(): string {
   return path.join(app.getPath("userData"), "carterax_fusion.db");
@@ -68,7 +84,7 @@ function crearVentana(): void {
     minHeight: 700,
     show: false,
     title: "CarteraX Phoenix",
-    backgroundColor: "#f5f3f0",
+    backgroundColor: fondoInterfaz(),
     autoHideMenuBar: true,
     icon: path.join(__dirname, "renderer", "assets", "icono.png"),
     webPreferences: {
@@ -80,7 +96,7 @@ function crearVentana(): void {
     },
   });
 
-  ventanaPrincipal.loadFile(path.join(__dirname, "renderer", "index.html"));
+  ventanaPrincipal.loadFile(path.join(__dirname, interfaz, "index.html"));
   ventanaPrincipal.once("ready-to-show", () => {
     ventanaPrincipal?.maximize();
     ventanaPrincipal?.show();
@@ -109,6 +125,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     if (process.platform === "win32") app.setAppUserModelId("cl.carterax.desktop");
+    interfaz = interfazInicial();
     asegurarUsuarioInicial(obtenerDb());
     alSalir = registrarManejadoresIpc(obtenerDb, () => ventanaPrincipal);
     crearMenu();

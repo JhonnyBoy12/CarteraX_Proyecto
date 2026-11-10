@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<!--
+  CarteraX — interfaz moderna de escritorio.
+  Usa el mismo backend (IPC) y la misma lógica de cola, importación,
+  reportes, teléfono, configuración y recordatorios que la interfaz clásica;
+  cambia la presentación, el login, el tablero y la ficha del cliente.
+  Los id de los elementos se mantienen para compartir esa lógica.
+-->
+<html lang="es" data-tema="oscuro">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'" />
+  <title>CarteraX</title>
+  <link rel="stylesheet" href="nova.css" />
+</head>
+<body>
+  <!-- Íconos (un solo trazo, 24×24) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="g-marca" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff9a4d"/><stop offset="1" stop-color="#e2570a"/></linearGradient>
+    </defs>
+    <symbol id="i-inicio" viewBox="0 0 24 24"><path d="M4 11.5 12 5l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/></symbol>
+    <symbol id="i-cartera" viewBox="0 0 24 24"><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7M4 8.5A1.5 1.5 0 0 1 5.5 7h13A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5zM4 12.5h16"/></symbol>
+    <symbol id="i-cola" viewBox="0 0 24 24"><path d="M6.6 10.8a15 15 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25c1.1.37 2.3.57 3.6.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.6a1 1 0 0 1-.25 1z"/></symbol>
+    <symbol id="i-reportes" viewBox="0 0 24 24"><path d="M5 20V10M10 20V4M15 20v-7M20 20V8"/></symbol>
+    <symbol id="i-importar" viewBox="0 0 24 24"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></symbol>
+    <symbol id="i-telefono" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 17.5h2"/></symbol>
+    <symbol id="i-ajustes" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+    <symbol id="i-campana" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0"/></symbol>
+    <symbol id="i-buscar" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></symbol>
+    <symbol id="i-sol" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></symbol>
+    <symbol id="i-luna" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></symbol>
+    <symbol id="i-salir" viewBox="0 0 24 24"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10"/></symbol>
+    <symbol id="i-flecha" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="i-atras" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></symbol>
+    <symbol id="i-arriba" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></symbol>
+    <symbol id="i-abajo" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-cerrar" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-copiar" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
+    <symbol id="i-tabla" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+    <symbol id="i-rejilla" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-filtro" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></symbol>
+    <symbol id="i-descargar" viewBox="0 0 24 24"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></symbol>
+    <symbol id="i-refrescar" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4.5h-4.5"/></symbol>
+    <symbol id="i-guardar" viewBox="0 0 24 24"><path d="M5 4h11l3 3v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1zM8 4v5h7V4M8 20v-6h8v6"/></symbol>
+    <symbol id="i-ojo" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-ojo-no" viewBox="0 0 24 24"><path d="M10.6 5.6A9 9 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a16 16 0 0 1-2.6 3.3M6.5 6.9C3.9 8.6 2.5 12 2.5 12s3.5 6.5 9.5 6.5c1.7 0 3.2-.5 4.5-1.2M4 4l16 16M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
+    <symbol id="i-correo" viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="m4 7 8 6 8-6"/></symbol>
+    <symbol id="i-candado" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-escudo" viewBox="0 0 24 24"><path d="M12 3 5 6v5.5c0 4.3 3 8 7 9.5 4-1.5 7-5.2 7-9.5V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-rayo" viewBox="0 0 24 24"><path d="M13 3 5 14h6l-1 7 8-11h-6z"/></symbol>
+    <symbol id="i-meta" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></symbol>
+    <symbol id="i-actividad" viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></symbol>
+    <symbol id="i-categorias" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></symbol>
+    <symbol id="i-resumen" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M4 10h16M10 10v10"/></symbol>
+    <symbol id="i-mas" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-lapiz" viewBox="0 0 24 24"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></symbol>
+    <symbol id="i-reloj" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+    <symbol id="i-fuego" viewBox="0 0 24 24"><path d="M12 21c-3.9 0-7-2.8-7-6.6 0-3 2-5 3.5-6.4.3 1.6 1.1 2.7 2.2 3.3C10.5 7.7 12.2 5 14.6 3c.3 2.6 1.6 4.3 2.9 5.9 1.2 1.4 1.5 2.9 1.5 4.9 0 4-3.1 7.2-7 7.2z"/></symbol>
+    <symbol id="i-calendario" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></symbol>
+    <symbol id="i-usuario" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c.8-3.6 3.8-5.5 7.5-5.5s6.7 1.9 7.5 5.5"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></symbol>
+    <symbol id="i-auto" viewBox="0 0 24 24"><path d="M5 16v-4l2-5h10l2 5v4M3.5 16h17v2.5h-17zM7 12h10"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-alerta" viewBox="0 0 24 24"><path d="M12 4 2.5 20h19z"/><path d="M12 10v4.5M12 17.2v.1"/></symbol>
+    <symbol id="i-comando" viewBox="0 0 24 24"><path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z"/></symbol>
+  </svg>
+
+  <!-- ============================== LOGIN ============================== -->
+  <section class="login" id="pantalla-login" hidden>
+    <div class="login-escena" aria-hidden="true">
+      <span class="aurora a1"></span><span class="aurora a2"></span><span class="aurora a3"></span>
+    </div>
+
+    <div class="login-relato">
+      <div class="marca-nova">
+        <img class="marca-signo" src="assets/logo.svg" alt="" width="36" height="36" />
+        <span>CarteraX</span>
+      </div>
+      <div class="login-titular">
+        <h2>Tu cartera del mes, clara desde el primer minuto.</h2>
+        <p>Prioriza a quién llamar, registra cada gestión sin perder el contexto y sigue tus metas en tiempo real.</p>
+      </div>
+      <ul class="login-puntos">
+        <li><span class="lp-icono"><svg><use href="#i-cola"/></svg></span><div><b>Cola de llamadas</b><small>Marca desde Phoenix Mobile, uno tras otro, por prioridad.</small></div></li>
+        <li><span class="lp-icono"><svg><use href="#i-meta"/></svg></span><div><b>Metas y actividad</b><small>Recuperación, llamadas y contactabilidad del mes.</small></div></li>
+        <li><span class="lp-icono"><svg><use href="#i-escudo"/></svg></span><div><b>Datos en tu equipo</b><small>Sin nube: la cartera y las gestiones viven en este computador.</small></div></li>
+      </ul>
+      <div class="login-vitrina" aria-hidden="true">
+        <div class="lv-cab"><span></span><span></span><span></span></div>
+        <div class="lv-kpis"><i style="--w:64%"></i><i style="--w:42%"></i><i style="--w:78%"></i></div>
+        <div class="lv-barras">
+          <b style="--h:38%"></b><b style="--h:62%"></b><b style="--h:48%"></b><b style="--h:80%"></b><b style="--h:56%"></b><b style="--h:92%"></b><b style="--h:70%"></b><b style="--h:44%"></b><b style="--h:66%"></b><b style="--h:84%"></b>
+        </div>
+      </div>
+    </div>
+
+    <div class="login-panel">
+      <form class="login-form" id="form-login" novalidate>
+        <header>
+          <h1>Bienvenido de vuelta</h1>
+          <p>Ingresa con tu cuenta de ejecutivo.</p>
+        </header>
+        <label class="campo-n">
+          <span>Correo</span>
+          <span class="campo-n-caja"><svg aria-hidden="true"><use href="#i-correo"/></svg>
+            <input id="login-email" type="email" autocomplete="username" spellcheck="false" placeholder="nombre@empresa.cl" required /></span>
+        </label>
+        <label class="campo-n">
+          <span>Contraseña</span>
+          <span class="campo-n-caja"><svg aria-hidden="true"><use href="#i-candado"/></svg>
+            <input id="login-password" type="password" autocomplete="current-password" placeholder="Tu contraseña" required />
+            <button type="button" class="ver-clave" id="login-ver" aria-label="Mostrar contraseña" aria-pressed="false"><svg aria-hidden="true"><use href="#i-ojo"/></svg></button></span>
+          <small class="mayus" id="login-mayus" hidden><svg aria-hidden="true"><use href="#i-alerta"/></svg>Bloq Mayús está activado</small>
+        </label>
+        <label class="recordar"><input type="checkbox" id="login-recordar" /> <span>Recordar mi correo en este equipo</span></label>
+        <p class="error-n" id="login-error" role="alert" hidden></p>
+        <button class="btn-n primario grande" type="submit" id="login-entrar"><span class="girador" aria-hidden="true"></span><span class="btn-texto">Ingresar</span></button>
+        <details class="login-primer">
+          <summary>¿Primer ingreso?</summary>
+          <p>Usuario inicial: <code>ejecutivo@carterax.cl</code> · contraseña <code>CarteraX123!</code>. Cámbiala después en Ajustes.</p>
+        </details>
+      </form>
+      <footer class="login-pie"><span id="login-version">CarteraX</span><span>Datos guardados sólo en este equipo</span></footer>
+    </div>
+  </section>
+
+  <!-- ============================== APLICACIÓN ============================== -->
+  <div class="app-n" id="aplicacion" hidden>
+    <div class="fondo-app" aria-hidden="true"><span class="halo h1"></span><span class="halo h2"></span></div>
+
+    <aside class="lateral-n" aria-label="Navegación">
+      <div class="lateral-marca">
+        <img class="marca-signo" src="assets/logo.svg" alt="" width="36" height="36" />
+        <div><strong>CarteraX</strong><span id="lateral-mes"></span></div>
+      </div>
+
+      <nav class="nav-n" id="nav-principal">
+        <span class="nav-indicador" aria-hidden="true"></span>
+        <p class="nav-grupo">Trabajo</p>
+        <button class="menu-item" data-ir="dashboard"><svg aria-hidden="true"><use href="#i-inicio"/></svg><span>Inicio</span>
+          <span class="insignia" id="insignia-alertas" hidden title="Alertas activas"></span></button>
+        <button class="menu-item" data-ir="clientes"><svg aria-hidden="true"><use href="#i-cartera"/></svg><span>Cartera</span>
+          <span class="nav-cuenta" id="nav-cuenta-clientes"></span></button>
+        <button class="menu-item" data-ir="cola"><svg aria-hidden="true"><use href="#i-cola"/></svg><span>Cola de llamadas</span>
+          <span class="insignia-cola" id="insignia-cola" hidden title="Cola en marcha"></span></button>
+        <p class="nav-grupo">Análisis</p>
+        <button class="menu-item" data-ir="reportes"><svg aria-hidden="true"><use href="#i-reportes"/></svg><span>Reportes</span></button>
+        <button class="menu-item" data-ir="importar"><svg aria-hidden="true"><use href="#i-importar"/></svg><span>Importar cartera</span></button>
+        <p class="nav-grupo">Sistema</p>
+        <button class="menu-item" data-ir="telefono"><svg aria-hidden="true"><use href="#i-telefono"/></svg><span>Teléfono</span></button>
+        <button class="menu-item" data-ir="config"><svg aria-hidden="true"><use href="#i-ajustes"/></svg><span>Ajustes</span></button>
+      </nav>
+
+      <button class="estado-dispositivo" data-ir="telefono" id="estado-telefono">
+        <span class="punto"></span><span class="estado-texto">Teléfono sin vincular</span>
+      </button>
+
+      <div class="perfil-n">
+        <button class="perfil-boton" id="btn-perfil" aria-haspopup="menu" aria-expanded="false" aria-controls="menu-perfil">
+          <span class="avatar-n" id="perfil-avatar">EJ</span>
+          <span class="perfil-textos"><strong id="usuario-nombre">Ejecutivo</strong><span id="usuario-email"></span></span>
+          <svg class="perfil-chevron" aria-hidden="true"><use href="#i-arriba"/></svg>
+        </button>
+        <div class="menu-perfil" id="menu-perfil" role="menu" hidden>
+          <div class="mp-cab"><span class="avatar-n grande" id="perfil-avatar-2">EJ</span><div><strong id="perfil-nombre-2"></strong><span id="perfil-email-2"></span></div></div>
+          <dl class="mp-cifras" id="perfil-cifras"></dl>
+          <button role="menuitem" class="mp-item" data-ir="config"><svg aria-hidden="true"><use href="#i-usuario"/></svg>Perfil y contraseña</button>
+          <button role="menuitem" class="mp-item" id="btn-tema-menu"><svg aria-hidden="true"><use href="#i-luna"/></svg><span>Cambiar a tema claro</span></button>
+          <button role="menuitem" class="mp-item" id="btn-paleta-menu"><svg aria-hidden="true"><use href="#i-comando"/></svg>Buscar y comandos <kbd>Ctrl K</kbd></button>
+          <button role="menuitem" class="mp-item peligro" id="btn-cerrar-sesion"><svg aria-hidden="true"><use href="#i-salir"/></svg>Cerrar sesión</button>
+        </div>
+      </div>
+    </aside>
+
+    <div class="principal-n">
+      <header class="barra-n">
+        <nav class="migas" aria-label="Ubicación"><span>CarteraX</span><svg aria-hidden="true"><use href="#i-flecha"/></svg><b id="miga-vista">Inicio</b><span id="miga-extra"></span></nav>
+        <button class="buscador-global" id="btn-paleta" type="button"><svg aria-hidden="true"><use href="#i-buscar"/></svg><span>Buscar cliente, RUT o acción…</span><kbd>Ctrl K</kbd></button>
+        <span class="espaciador"></span>
+        <label class="selector-mes-n">
+          <svg aria-hidden="true"><use href="#i-calendario"/></svg>
+          <select id="selector-mes" aria-label="Mes de trabajo"></select>
+        </label>
+        <button class="icono-btn" id="btn-tema" type="button" aria-label="Cambiar tema"><svg aria-hidden="true"><use href="#i-sol"/></svg></button>
+        <button class="btn-recordatorios" id="btn-recordatorios" type="button" aria-controls="panel-recordatorios" aria-expanded="false" aria-label="Recordatorios">
+          <svg aria-hidden="true"><use href="#i-campana"/></svg><span class="contador" id="contador-recordatorios">0</span>
+        </button>
+      </header>
+      <p class="aviso-mes" id="aviso-mes-cerrado" hidden></p>
+
+      <main class="contenido-n" id="contenido">
+
+        <!-- ============================ INICIO ============================ -->
+        <section class="vista" data-vista="dashboard" hidden>
+          <header class="cabecera-n">
+            <div><h1 id="dashboard-titulo">Inicio</h1><p class="bajada" id="dashboard-bajada"></p></div>
+            <div class="acciones">
+              <button class="btn-n secundario" id="btn-dashboard-actualizar"><svg aria-hidden="true"><use href="#i-refrescar"/></svg>Actualizar</button>
+              <button class="btn-n primario" id="btn-dashboard-reporte"><svg aria-hidden="true"><use href="#i-guardar"/></svg>Guardar reporte</button>
+            </div>
+          </header>
+          <div class="vacio-n" id="dashboard-vacio" hidden>
+            <span class="vacio-icono"><svg aria-hidden="true"><use href="#i-importar"/></svg></span>
+            <h2>Este mes todavía no tiene cartera</h2>
+            <p>Importa el Excel o CSV de tu cartera para ver la deuda, la actividad, las metas y las categorías.</p>
+            <button class="btn-n primario" data-ir="importar">Importar cartera</button>
+          </div>
+          <div id="dashboard-contenido"></div>
+        </section>
+
+        <!-- ============================= CARTERA ============================= -->
+        <section class="vista vista-clientes" data-vista="clientes" hidden>
+          <header class="cabecera-n">
+            <div><h1>Cartera</h1><p class="bajada" id="clientes-resumen"></p></div>
+            <div class="acciones">
+              <div class="conmutador" role="group" aria-label="Vista de la cartera">
+                <button id="vista-tabla" aria-pressed="true" aria-label="Ver como tabla"><svg aria-hidden="true"><use href="#i-tabla"/></svg></button>
+                <button id="vista-tarjetas" aria-pressed="false" aria-label="Ver como tarjetas"><svg aria-hidden="true"><use href="#i-rejilla"/></svg></button>
+              </div>
+              <button class="btn-n secundario" id="btn-exportar-xlsx"><svg aria-hidden="true"><use href="#i-descargar"/></svg>Excel</button>
+              <button class="btn-n secundario" id="btn-exportar-csv">CSV</button>
+            </div>
+          </header>
+
+          <div class="segmentos" id="filtros-rapidos" role="group" aria-label="Filtros rápidos">
+            <button data-rapido="" aria-pressed="true">Todos</button>
+            <button data-rapido="proxima_gestion_hoy" aria-pressed="false">Agendados hoy</button>
+            <button data-rapido="compromisos_vencidos" aria-pressed="false">Compromisos vencidos</button>
+            <button data-rapido="compromisos_semana" aria-pressed="false">Compromisos semana</button>
+            <button data-rapido="sin_gestion" aria-pressed="false">Sin gestión reciente</button>
+            <button data-rapido="gestionados_hoy" aria-pressed="false">Gestionados hoy</button>
+          </div>
+
+          <div class="barra-filtros-n">
+            <label class="buscador-n">
+              <svg aria-hidden="true"><use href="#i-buscar"/></svg>
+              <input type="search" id="buscar-cliente" placeholder="Buscar por RUT, nombre, patente, teléfono o correo" autocomplete="off" />
+              <kbd title="Atajo">/</kbd>
+            </label>
+            <label class="select-n"><span>Ordenar</span>
+              <select id="orden-clientes">
+                <option value="prioridad">Prioridad</option>
+                <option value="deuda_desc">Mayor deuda</option>
+                <option value="deuda_asc">Menor deuda</option>
+                <option value="mora_desc">Más días de mora</option>
+                <option value="mora_asc">Menos días de mora</option>
+                <option value="ultima_gestion">Gestión más reciente</option>
+                <option value="compromiso">Fecha de compromiso</option>
+                <option value="nombre">Nombre (A–Z)</option>
+              </select>
+            </label>
+            <button class="btn-n secundario" id="btn-mas-filtros" aria-expanded="false" aria-controls="panel-filtros">
+              <svg aria-hidden="true"><use href="#i-filtro"/></svg>Filtros <span class="contador activo" id="contador-filtros" hidden></span>
+            </button>
+            <button class="btn-n texto" id="btn-limpiar-filtros">Limpiar</button>
+          </div>
+
+          <div class="panel-filtros-n" id="panel-filtros" hidden>
+            <fieldset>
+              <legend>Deuda</legend>
+              <div class="rango"><input id="deuda-min" placeholder="Desde $" inputmode="numeric" /><span>a</span><input id="deuda-max" placeholder="Hasta $" inputmode="numeric" /></div>
+              <div class="chips" id="presets-deuda"></div>
+            </fieldset>
+            <fieldset>
+              <legend>Días de mora</legend>
+              <div class="rango"><input id="mora-min" type="number" min="0" placeholder="Desde" /><span>a</span><input id="mora-max" type="number" min="0" placeholder="Hasta" /></div>
+              <div class="chips" id="presets-mora"></div>
+            </fieldset>
+            <fieldset class="selects">
+              <legend>Otros</legend>
+              <select id="filtro-tramo" aria-label="Tramo de mora"><option value="">Todos los tramos</option></select>
+              <select id="filtro-comuna" aria-label="Comuna"><option value="">Todas las comunas</option></select>
+              <select id="filtro-telefono" aria-label="Teléfono">
+                <option value="">Con o sin teléfono</option><option value="si">Con teléfono válido</option><option value="no">Sin teléfono válido</option>
+              </select>
+              <select id="filtro-prioridad" aria-label="Prioridad">
+                <option value="">Cualquier prioridad</option><option value="alta">Prioridad alta</option><option value="media">Prioridad media</option><option value="baja">Prioridad baja</option>
+              </select>
+            </fieldset>
+          </div>
+
+          <div class="chips-estado-n" id="chips-estado" aria-label="Filtrar por estado"></div>
+
+          <div class="barra-seleccion-n" id="barra-seleccion" hidden>
+            <strong id="sel-cantidad"></strong>
+            <button class="btn-n texto" id="sel-todos-filtrados"></button>
+            <span class="espaciador"></span>
+            <button class="btn-n primario" id="sel-a-cola"><svg aria-hidden="true"><use href="#i-cola"/></svg>Enviar a la cola</button>
+            <button class="btn-n secundario" id="sel-cambiar-estado">Cambiar estado</button>
+            <button class="btn-n texto" id="sel-limpiar">Quitar selección</button>
+          </div>
+
+          <div class="tabla-n tabla-principal" id="contenedor-tabla">
+            <table id="tabla-clientes">
+              <thead>
+                <tr>
+                  <th class="col-check"><input type="checkbox" id="sel-pagina" aria-label="Seleccionar la página" /></th>
+                  <th>Cliente</th><th>Estado</th><th class="num">Deuda</th><th class="num">Mora</th>
+                  <th class="col-prioridad">Prioridad</th><th class="col-gestion">Última gestión</th><th class="col-telefono">Contacto</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="rejilla-clientes" id="grid-clientes" hidden></div>
+
+          <footer class="paginacion-n">
+            <label class="select-n"><span>Por página</span>
+              <select id="por-pagina"><option>25</option><option selected>50</option><option>100</option><option>200</option></select>
+            </label>
+            <span class="espaciador"></span>
+            <button class="icono-btn" id="pag-anterior" aria-label="Página anterior"><svg aria-hidden="true"><use href="#i-atras"/></svg></button>
+            <span id="pag-info"></span>
+            <button class="icono-btn" id="pag-siguiente" aria-label="Página siguiente"><svg aria-hidden="true"><use href="#i-flecha"/></svg></button>
+          </footer>
+        </section>
+
+        <!-- ========================= COLA DE LLAMADAS ========================= -->
+        <section class="vista" data-vista="cola" hidden>
+          <header class="cabecera-n">
+            <div>
+              <h1>Cola de llamadas</h1>
+              <p class="bajada">Llama de a uno a los clientes «En cola», por prioridad, desde Phoenix Mobile.</p>
+            </div>
+            <div class="acciones">
+              <button class="btn-n primario grande" id="cola-iniciar"><svg aria-hidden="true"><use href="#i-cola"/></svg>Iniciar cola</button>
+              <button class="btn-n secundario" id="cola-pausar" hidden>Pausar</button>
+              <button class="btn-n primario" id="cola-reanudar" hidden>Reanudar</button>
+              <button class="btn-n texto peligro" id="cola-detener" hidden>Detener</button>
+            </div>
+          </header>
+          <div id="vista-cola-contenido" class="cola-rejilla-n">
+            <section class="tarjeta-n cola-principal">
+              <div class="cola-estado">
+                <span class="cola-proceso" id="cola-proceso" data-proceso="DETENIDA">Detenida</span>
+                <p id="cola-mensaje" class="bajada"></p>
+              </div>
+              <div class="cola-intento" id="cola-intento" hidden></div>
+              <div class="cola-actual" id="cola-actual"></div>
+            </section>
+            <aside class="cola-lateral">
+              <section class="tarjeta-n">
+                <header class="tarjeta-cab"><h2>Esta sesión</h2></header>
+                <dl class="cola-sesion" id="cola-sesion"></dl>
+              </section>
+              <section class="tarjeta-n">
+                <header class="tarjeta-cab"><h2>Siguen</h2><span class="bajada" id="cola-pendientes"></span></header>
+                <ol class="cola-proximos" id="cola-proximos"></ol>
+                <p class="nota-alerta" id="cola-sin-telefono" hidden></p>
+              </section>
+            </aside>
+          </div>
+          <section class="tarjeta-n">
+            <header class="tarjeta-cab"><h2>Últimas llamadas</h2></header>
+            <div class="tabla-n">
+              <table id="tabla-llamadas-cola" class="tabla-compacta">
+                <thead><tr><th>Fecha</th><th>Cliente</th><th>Número</th><th>Resultado</th><th class="num">Duración</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <!-- ============================= REPORTES ============================= -->
+        <section class="vista" data-vista="reportes" hidden>
+          <header class="cabecera-n">
+            <div>
+              <h1>Reportes</h1>
+              <p class="bajada">Cada reporte guarda una fotografía de la cartera. Al terminar cada mes se guarda el cierre automáticamente.</p>
+            </div>
+            <div class="acciones"><button class="btn-n primario" id="btn-reporte-nuevo">Guardar reporte</button></div>
+          </header>
+          <div class="reportes-rejilla-n">
+            <nav class="lista-reportes tarjeta-n" id="lista-reportes" aria-label="Reportes guardados"></nav>
+            <div class="reporte-detalle" id="reporte-detalle"></div>
+          </div>
+        </section>
+
+        <!-- ============================= IMPORTAR ============================= -->
+        <section class="vista" data-vista="importar" hidden>
+          <header class="cabecera-n">
+            <div>
+              <h1>Importar cartera</h1>
+              <p class="bajada">Excel (.xlsx, .xls, .xlsm, .ods) o texto (.csv, .tsv, .txt). Revisa la vista previa antes de cargar.</p>
+            </div>
+            <label class="select-n destacado"><span>Mes de la cartera</span><input type="month" id="importar-mes" /></label>
+          </header>
+
+          <div class="zona-carga" id="zona-carga" tabindex="0" role="button" aria-label="Elegir archivo de cartera">
+            <span class="zc-icono"><svg aria-hidden="true"><use href="#i-importar"/></svg></span>
+            <p class="zona-principal">Arrastra aquí el archivo de cartera</p>
+            <p class="zona-secundaria">o <span class="enlace">elígelo desde tu equipo</span></p>
+            <p class="zona-nota">Si un cliente ya está en la cartera de ese mes, se actualizan su deuda y contactos y conserva su estado y sus gestiones.</p>
+          </div>
+
+          <div id="previa" class="tarjeta-n" hidden>
+            <div class="previa-cabecera">
+              <div><h2 id="previa-nombre"></h2><p class="bajada" id="previa-meta"></p></div>
+              <div class="acciones">
+                <button class="btn-n texto" id="btn-cancelar-previa">Cancelar</button>
+                <button class="btn-n primario" id="btn-confirmar-importacion">Importar</button>
+              </div>
+            </div>
+            <div class="pestanas" id="previa-pestanas" role="tablist"></div>
+            <div id="previa-hoja"></div>
+          </div>
+
+          <div id="resultado-importacion" hidden></div>
+
+          <section class="tarjeta-n">
+            <header class="tarjeta-cab"><h2>Archivos importados</h2></header>
+            <div class="tabla-n">
+              <table id="tabla-historial" class="tabla-compacta">
+                <thead><tr><th>Fecha</th><th>Mes</th><th>Archivo</th><th>Hoja</th><th class="num">Cargadas</th><th class="num">Con error</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <!-- ============================= TELÉFONO ============================= -->
+        <section class="vista" data-vista="telefono" hidden>
+          <header class="cabecera-n">
+            <div><h1>Teléfono</h1><p class="bajada">Phoenix Mobile hace las llamadas con la SIM de un teléfono Android en la misma red Wi‑Fi.</p></div>
+          </header>
+          <div class="rejilla-dos-n">
+            <section class="tarjeta-n">
+              <header class="tarjeta-cab">
+                <h2>Vincular Phoenix Mobile</h2>
+                <button class="btn-n texto pequeño" id="btn-desvincular-movil" type="button" hidden>Desvincular</button>
+              </header>
+              <div class="ficha-estado" id="ficha-movil" data-estado="desconocido">
+                <span class="fe-punto"></span>
+                <div><p class="fe-titulo" id="movil-titulo">Sin vincular</p><p class="bajada" id="movil-detalle"></p></div>
+              </div>
+              <div class="buscar-movil">
+                <button class="btn-n secundario" id="btn-buscar-movil" type="button"><svg aria-hidden="true"><use href="#i-buscar"/></svg>Buscar teléfonos</button>
+                <p class="bajada">Encuentra en tu Wi‑Fi los teléfonos con Phoenix Mobile abierta.</p>
+              </div>
+              <ul class="lista-moviles" id="lista-moviles" hidden></ul>
+              <div class="panel-codigo" id="panel-codigo" hidden>
+                <p class="pc-titulo" id="codigo-titulo">Escribe el código del teléfono</p>
+                <p class="bajada">Son los 6 dígitos que muestra Phoenix Mobile en «Vincula con CarteraX».</p>
+                <div class="otp" id="otp" role="group" aria-label="Código de vinculación de 6 dígitos">
+                  <input type="text" inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Dígito 1" />
+                  <input type="text" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Dígito 2" />
+                  <input type="text" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Dígito 3" />
+                  <span class="otp-sep" aria-hidden="true"></span>
+                  <input type="text" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Dígito 4" />
+                  <input type="text" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Dígito 5" />
+                  <input type="text" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Dígito 6" />
+                </div>
+                <p class="pc-pista">Escríbelo o pégalo: se vincula solo al completar el último dígito.</p>
+                <div class="pc-acciones">
+                  <button class="btn-n texto" id="btn-cancelar-codigo" type="button">Cancelar</button>
+                  <button class="btn-n primario" id="btn-vincular-movil" type="button">Vincular</button>
+                </div>
+              </div>
+              <details class="ip-manual">
+                <summary>Escribir la IP a mano</summary>
+                <div class="fila-campo">
+                  <label class="campo"><span>IP que muestra Phoenix Mobile</span><input type="text" id="movil-ip" placeholder="192.168.1.25" inputmode="decimal" /></label>
+                  <button class="btn-n secundario" id="btn-probar-movil" type="button">Conectar</button>
+                </div>
+              </details>
+              <h2 class="separado">Llamada manual</h2>
+              <form class="fila-campo" id="form-llamada-manual">
+                <label class="campo"><span>Número</span><input type="tel" id="movil-numero" placeholder="+56912345678" /></label>
+                <button class="btn-n secundario" id="btn-llamar-manual" type="submit"><svg aria-hidden="true"><use href="#i-cola"/></svg>Llamar</button>
+              </form>
+            </section>
+            <section class="tarjeta-n">
+              <h2>Cómo vincular</h2>
+              <ol class="pasos">
+                <li>Instala y abre <strong>Phoenix Mobile</strong> en el teléfono Android y deja todo en verde en «Para que no se corte».</li>
+                <li>Conecta el computador y el teléfono a la misma red Wi‑Fi.</li>
+                <li>Pulsa «Buscar teléfonos», elige el tuyo y escribe el código de 6 dígitos que muestra.</li>
+                <li>Listo: ese teléfono sólo recibe llamadas de este computador, aunque en la oficina haya otros en la misma red.</li>
+              </ol>
+              <p class="bajada">Si el teléfono cambia de IP, CarteraX lo vuelve a encontrar solo. ¿Sin teléfono a mano? Ejecuta <code>npm run simulador-movil</code>.</p>
+            </section>
+          </div>
+          <section class="tarjeta-n">
+            <header class="tarjeta-cab"><h2>Llamadas recientes</h2></header>
+            <div class="tabla-n">
+              <table id="tabla-llamadas" class="tabla-compacta">
+                <thead><tr><th>Fecha</th><th>Cliente</th><th>Número</th><th>Resultado</th><th class="num">Duración</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <!-- =========================== AJUSTES =========================== -->
+        <section class="vista" data-vista="config" hidden>
+          <header class="cabecera-n"><div><h1>Ajustes</h1><p class="bajada" id="cfg-version"></p></div></header>
+          <div class="rejilla-dos-n">
+            <form class="tarjeta-n" id="form-config">
+              <h2>Metas y alertas</h2>
+              <label class="campo"><span>Meta de recuperación mensual</span><input id="cfg-meta" inputmode="numeric" placeholder="$ 0 (sin meta)" /></label>
+              <label class="campo"><span>Alertar clientes prioritarios sin gestión después de (días)</span><input id="cfg-dias" type="number" min="1" max="90" /></label>
+              <label class="campo"><span>Cerrar sesión tras minutos sin uso</span><input id="cfg-inactividad" type="number" min="5" max="480" /></label>
+              <div class="form-acciones"><button class="btn-n primario" type="submit">Guardar preferencias</button></div>
+            </form>
+            <form class="tarjeta-n" id="form-password">
+              <h2>Cambiar contraseña</h2>
+              <label class="campo"><span>Contraseña actual</span><input id="pwd-actual" type="password" autocomplete="current-password" required /></label>
+              <label class="campo"><span>Nueva contraseña</span><input id="pwd-nueva" type="password" autocomplete="new-password" minlength="8" required /></label>
+              <div class="fuerza" id="pwd-fuerza" aria-live="polite"><span></span><span></span><span></span><span></span><small></small></div>
+              <label class="campo"><span>Repite la nueva contraseña</span><input id="pwd-repetir" type="password" autocomplete="new-password" minlength="8" required /></label>
+              <p class="bajada">Mínimo 8 caracteres, con letras y números.</p>
+              <div class="form-acciones"><button class="btn-n primario" type="submit">Cambiar contraseña</button></div>
+            </form>
+            <section class="tarjeta-n">
+              <h2>Apariencia</h2>
+              <p class="bajada">El tema se guarda en este equipo.</p>
+              <div class="conmutador ancho" role="group" aria-label="Tema">
+                <button data-tema-elegir="oscuro" aria-pressed="true"><svg aria-hidden="true"><use href="#i-luna"/></svg>Oscuro</button>
+                <button data-tema-elegir="claro" aria-pressed="false"><svg aria-hidden="true"><use href="#i-sol"/></svg>Claro</button>
+              </div>
+            </section>
+            <section class="tarjeta-n">
+              <h2>Respaldo de datos</h2>
+              <p class="bajada">Toda tu cartera, gestiones y reportes viven en este computador. Guarda un respaldo periódico en otra carpeta o unidad.</p>
+              <div class="acciones">
+                <button class="btn-n primario" id="btn-respaldar">Guardar respaldo</button>
+                <button class="btn-n texto peligro" id="btn-restaurar">Restaurar un respaldo</button>
+              </div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- ============================== FICHA DEL CLIENTE ============================== -->
+  <div class="velo-ficha" id="velo-ficha" hidden></div>
+  <aside class="ficha-n" id="ficha" hidden aria-label="Ficha del cliente" role="dialog" aria-modal="false">
+    <div class="ficha-barra">
+      <div class="ficha-nav">
+        <button class="icono-btn" id="ficha-anterior" aria-label="Cliente anterior (Alt + ↑)"><svg aria-hidden="true"><use href="#i-arriba"/></svg></button>
+        <button class="icono-btn" id="ficha-siguiente" aria-label="Cliente siguiente (Alt + ↓)"><svg aria-hidden="true"><use href="#i-abajo"/></svg></button>
+        <span id="ficha-posicion"></span>
+      </div>
+      <button class="icono-btn" id="ficha-cerrar" aria-label="Cerrar ficha"><svg aria-hidden="true"><use href="#i-cerrar"/></svg></button>
+    </div>
+    <div id="ficha-cuerpo"></div>
+  </aside>
+
+  <!-- ============================== DIÁLOGOS ============================== -->
+  <dialog id="dialogo-confirmar" class="dialogo">
+    <h2 id="confirmar-titulo"></h2>
+    <p id="confirmar-detalle" class="bajada"></p>
+    <div class="form-acciones"><button class="btn texto" id="confirmar-cancelar">Cancelar</button><button class="btn primario" id="confirmar-aceptar">Aceptar</button></div>
+  </dialog>
+
+  <dialog id="dialogo-masivo" class="dialogo">
+    <form id="form-masivo" method="dialog">
+      <h2 id="masivo-titulo">Cambiar estado</h2>
+      <label class="campo"><span>Nuevo estado</span><select id="masivo-estado"></select></label>
+      <p class="bajada" id="masivo-descripcion"></p>
+      <label class="campo" id="masivo-campo-fecha" hidden><span>Fecha del compromiso</span><input type="date" id="masivo-fecha" /></label>
+      <label class="campo"><span>Próxima gestión (opcional)</span><input type="date" id="masivo-proxima" /></label>
+      <label class="campo"><span>Comentario (queda en el historial de cada cliente)</span><textarea id="masivo-comentario" rows="3" maxlength="2000"></textarea></label>
+      <div class="form-acciones"><button class="btn texto" type="button" id="masivo-cancelar">Cancelar</button><button class="btn primario" type="submit">Aplicar</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="dialogo-reporte" class="dialogo">
+    <form id="form-reporte" method="dialog">
+      <h2 id="reporte-dialogo-titulo">Guardar reporte</h2>
+      <p class="bajada">Se guarda una fotografía de la cartera de este mes: indicadores, gráficos y el estado de cada cliente.</p>
+      <label class="campo"><span>Título</span><input id="reporte-titulo" maxlength="120" required /></label>
+      <label class="campo"><span>Notas (opcional)</span><textarea id="reporte-notas" rows="3" maxlength="2000" placeholder="Ej. corte de la primera quincena"></textarea></label>
+      <div class="form-acciones"><button class="btn texto" type="button" id="reporte-cancelar">Cancelar</button><button class="btn primario" type="submit">Guardar reporte</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="dialogo-llamada" class="dialogo">
+    <form id="form-llamada" method="dialog">
+      <h2>Cómo terminó la llamada</h2>
+      <p class="bajada" id="llamada-detalle"></p>
+      <label class="campo"><span>Resultado</span><select id="llamada-motivo"></select></label>
+      <div class="campo" id="llamada-campo-duracion">
+        <span>Duración de la conversación</span>
+        <div class="campo-duracion">
+          <label class="campo-en-linea"><input type="number" id="llamada-min" min="0" max="360" inputmode="numeric" /> min</label>
+          <label class="campo-en-linea"><input type="number" id="llamada-seg" min="0" max="59" inputmode="numeric" /> s</label>
+        </div>
+      </div>
+      <p class="bajada" id="llamada-nota">«Número no existe» saca ese teléfono de la cola. Puedes reactivarlo desde la ficha del cliente.</p>
+      <div class="form-acciones"><button class="btn texto" type="button" id="llamada-cancelar">Cancelar</button><button class="btn primario" type="submit">Guardar</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="dialogo-metas" class="dialogo">
+    <form id="form-metas" method="dialog">
+      <h2>Metas personales del mes</h2>
+      <p class="bajada">Se guardan en este equipo y se miden con la actividad del mes. La meta de recuperación se define en Ajustes.</p>
+      <div class="metas-campos">
+        <label class="campo"><span>Llamadas en el mes</span><input type="number" min="0" max="20000" id="meta-llamadas" /></label>
+        <label class="campo"><span>Gestiones en el mes</span><input type="number" min="0" max="50000" id="meta-gestiones" /></label>
+        <label class="campo"><span>Contactabilidad (%)</span><input type="number" min="0" max="100" id="meta-contacto" /></label>
+        <label class="campo"><span>Cartera gestionada (%)</span><input type="number" min="0" max="100" id="meta-cobertura" /></label>
+      </div>
+      <div class="form-acciones"><button class="btn texto" type="button" id="metas-cancelar">Cancelar</button><button class="btn primario" type="submit">Guardar metas</button></div>
+    </form>
+  </dialog>
+
+  <!-- Paleta de búsqueda y comandos -->
+  <dialog id="paleta" class="paleta" aria-label="Buscar y comandos">
+    <div class="paleta-entrada"><svg aria-hidden="true"><use href="#i-buscar"/></svg>
+      <input id="paleta-texto" type="text" placeholder="Busca un cliente por nombre o RUT, o escribe una acción…" autocomplete="off" spellcheck="false" aria-controls="paleta-lista" />
+      <kbd>Esc</kbd></div>
+    <ul class="paleta-lista" id="paleta-lista" role="listbox"></ul>
+    <footer class="paleta-pie"><span><kbd>↑</kbd><kbd>↓</kbd> moverse</span><span><kbd>Enter</kbd> abrir</span></footer>
+  </dialog>
+
+  <!-- Recordatorios -->
+  <div class="velo" id="velo-recordatorios" hidden></div>
+  <aside class="panel-lateral" id="panel-recordatorios" aria-label="Recordatorios" aria-hidden="true">
+    <header class="panel-lateral-cab">
+      <div><h2>Recordatorios</h2><p id="recordatorios-resumen"></p></div>
+      <button class="icono-btn" id="recordatorios-cerrar" aria-label="Cerrar recordatorios"><svg aria-hidden="true"><use href="#i-cerrar"/></svg></button>
+    </header>
+    <div class="panel-lateral-cuerpo" id="recordatorios-cuerpo"></div>
+  </aside>
+
+  <section class="llamada-manual" id="llamada-manual" hidden aria-live="polite"></section>
+  <div class="avisos" id="avisos" aria-live="polite"></div>
+
+  <script src="nova.js"></script>
+</body>
+</html>

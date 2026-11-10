@@ -331,14 +331,37 @@
           <div class="rejilla-dos">
             <section class="bloque">
               <h2>Vincular Phoenix Mobile</h2>
-              <div class="fila-campo">
-                <label class="campo"><span>IP que muestra Phoenix Mobile</span><input type="text" id="movil-ip" placeholder="192.168.1.25" inputmode="decimal" /></label>
-                <button class="btn primario" id="btn-probar-movil">Probar conexión</button>
-              </div>
               <div class="ficha-estado" id="ficha-movil" data-estado="desconocido">
                 <p class="fe-titulo" id="movil-titulo">Sin vincular</p>
                 <p class="bajada" id="movil-detalle"></p>
               </div>
+              <div class="fila-campo">
+                <button class="btn primario" id="btn-buscar-movil" type="button">Buscar teléfonos</button>
+                <button class="btn texto" id="btn-desvincular-movil" type="button" hidden>Desvincular</button>
+              </div>
+              <ul class="lista-moviles" id="lista-moviles" hidden></ul>
+              <div class="panel-codigo" id="panel-codigo" hidden>
+                <p class="fe-titulo" id="codigo-titulo">Escribe el código del teléfono</p>
+                <div class="otp" id="otp" role="group" aria-label="Código de vinculación de 6 dígitos">
+                  <input type="text" inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Dígito 1" />
+                  <input type="text" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Dígito 2" />
+                  <input type="text" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Dígito 3" />
+                  <input type="text" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Dígito 4" />
+                  <input type="text" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Dígito 5" />
+                  <input type="text" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="Dígito 6" />
+                </div>
+                <div class="fila-campo">
+                  <button class="btn texto" id="btn-cancelar-codigo" type="button">Cancelar</button>
+                  <button class="btn primario" id="btn-vincular-movil" type="button">Vincular</button>
+                </div>
+              </div>
+              <details class="ip-manual">
+                <summary>Escribir la IP a mano</summary>
+                <div class="fila-campo">
+                  <label class="campo"><span>IP que muestra Phoenix Mobile</span><input type="text" id="movil-ip" placeholder="192.168.1.25" inputmode="decimal" /></label>
+                  <button class="btn secundario" id="btn-probar-movil" type="button">Conectar</button>
+                </div>
+              </details>
               <h2 class="separado">Llamada manual</h2>
               <form class="fila-campo" id="form-llamada-manual">
                 <label class="campo"><span>Número</span><input type="tel" id="movil-numero" placeholder="+56912345678" /></label>

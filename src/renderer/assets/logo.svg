@@ -1,8 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="CarteraX">
-  <!-- CarteraX: una X cuyo trazo ascendente es una flecha de recuperación.
-       Azul noche + naranja Phoenix Service. Fuente de todos los íconos
-       (scripts/generar-iconos.js). -->
-  <rect width="64" height="64" rx="15" fill="#16203A"/>
-  <path d="M20 20 L26 26 M38 38 L44 44" fill="none" stroke="#FFFFFF" stroke-width="6.5" stroke-linecap="round"/>
-  <path d="M20 44 L44 20 M31 20 H44 V33" fill="none" stroke="#DE762E" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- CarteraX: una X cuyo trazo termina en flecha arriba a la izquierda
+       (naranjo) y el otro trazo, blanco, pasa por debajo con un corte limpio.
+       Azul noche + naranjo. Fuente de todos los íconos: escritorio, instalador
+       y Phoenix Mobile (scripts/generar-iconos.js). -->
+  <defs>
+    <linearGradient id="cx-fondo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1D2742"/>
+      <stop offset="1" stop-color="#0C1019"/>
+    </linearGradient>
+    <linearGradient id="cx-flecha" gradientUnits="userSpaceOnUse" x1="44" y1="44" x2="20" y2="20">
+      <stop offset="0" stop-color="#E2570A"/>
+      <stop offset="1" stop-color="#FF9A4D"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#cx-fondo)"/>
+  <rect x="0.75" y="0.75" width="62.5" height="62.5" rx="14.25" fill="none" stroke="#FFFFFF" stroke-opacity="0.08" stroke-width="1.5"/>
+  <path d="M20 44 L26 38 M38 26 L44 20" fill="none" stroke="#FFFFFF" stroke-width="6.5" stroke-linecap="round"/>
+  <path d="M44 44 L20 20 M20 33 V20 H33" fill="none" stroke="url(#cx-flecha)" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

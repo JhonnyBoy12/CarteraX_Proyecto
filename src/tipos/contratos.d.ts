@@ -532,12 +532,35 @@ declare namespace Phoenix {
     seguimientoLlamadas?: boolean;
     version?: string;
     detalle?: string;
+    /** Identificador estable del teléfono (Phoenix Mobile 0.4+). */
+    idEquipo?: string;
+    /** El teléfono usa código de vinculación (0.4+). */
+    admiteVinculo?: boolean;
+    /** Respondió, pero este computador no está vinculado: no acepta órdenes. */
+    requiereVinculo?: boolean;
+    /** Está vinculado con otro computador. */
+    vinculadoConOtro?: boolean;
+    /** Es el teléfono vinculado a este computador y respondió. */
+    vinculado?: boolean;
+  }
+
+  /** Teléfono con Phoenix Mobile encontrado al buscar en la red. */
+  interface MovilEncontrado {
+    ip: string;
+    dispositivo: string;
+    idEquipo: string | null;
+    version: string | null;
+    admiteVinculo: boolean;
+    /** Es el teléfono vinculado a este computador. */
+    vinculado: boolean;
   }
 
   interface ResultadoLlamada {
     numero: string;
     accion: string;
     gestionId: string | null;
+    /** Id de la llamada en el teléfono (Phoenix Mobile 0.4+). */
+    callId?: number | null;
   }
 
   interface ItemColaLlamadas {
